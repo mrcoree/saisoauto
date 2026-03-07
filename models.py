@@ -77,6 +77,8 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
+                nickname TEXT,
+                email TEXT,
                 is_admin INTEGER DEFAULT 0,
                 coupang_access_key TEXT,
                 coupang_secret_key TEXT,
@@ -126,12 +128,12 @@ def init_db():
 
 # ── Users CRUD ──
 
-def create_user(username, password, is_admin=0):
+def create_user(username, password, is_admin=0, nickname=None, email=None):
     with get_db() as conn:
         try:
             conn.execute(
-                'INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)',
-                (username, generate_password_hash(password), is_admin)
+                'INSERT INTO users (username, password_hash, is_admin, nickname, email) VALUES (?, ?, ?, ?, ?)',
+                (username, generate_password_hash(password), is_admin, nickname, email)
             )
             user_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
             # 기본 스케줄 설정도 함께 생성
@@ -143,6 +145,14 @@ def create_user(username, password, is_admin=0):
             return user_id, None
         except sqlite3.IntegrityError:
             return None, "이미 존재하는 아이디입니다."
+
+def delete_user(user_id):
+    """user_id에 해당하는 사용자와 모든 관련 데이터를 DB에서 완전히 삭제 (Hard Delete)."""
+    with get_db() as conn:
+        conn.execute('DELETE FROM product_queue WHERE user_id = ?', (user_id,))
+        conn.execute('DELETE FROM schedule_settings WHERE user_id = ?', (user_id,))
+        conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        conn.commit()
 
 def get_user_count():
     """DB에 저장된 전체 사용자 수."""

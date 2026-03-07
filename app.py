@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
+from werkzeug.security import check_password_hash
 
 # 프로젝트 루트를 path에 추가
 sys.path.insert(0, os.path.dirname(__file__))
@@ -16,7 +17,7 @@ from models import (
     delete_queue_item, reset_item, get_schedule_settings,
     update_schedule_settings, get_queue_stats,
     create_user, get_user_by_username, get_user_by_id, update_user_keys,
-    get_user_count, get_admin_users
+    get_user_count, get_admin_users, delete_user
 )
 from coupang_api import CoupangAPI
 from scraper import CoupangScraper
@@ -123,30 +124,31 @@ def register():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
+        nickname = request.form.get('nickname', '').strip()
+        email = request.form.get('email', '').strip()
 
-        if not username or not password:
-            flash('아이디와 비밀번호를 입력해 주세요.')
-            return render_template('register.html')
+        if not username or not password or not nickname or not email:
+            flash('모든 필수 항목을 입력해 주세요.')
+            user_count = get_user_count()
+            return render_template('register.html', need_invite=(user_count > 0))
 
         user_count = get_user_count()
 
         if user_count == 0:
-            # 첨 번째 사용자는 자동으로 최고 관리자(어드민)가 됩니다
-            user_id, err = create_user(username, password, is_admin=1)
+            # 첨 번째 사용자는 자동으로 최고 관리자(is_admin=1)가 됩니다
+            user_id, err = create_user(username, password, is_admin=1, nickname=nickname, email=email)
         else:
             # 2번째부터는 기존 관리자의 승인 코드 확인
             invite_code = request.form.get('invite_code', '')
             admins = get_admin_users()
-            # 관리자 데이터브에서 유회된 맰 첫 번째 관리자 비밀번호 매칭
             from werkzeug.security import check_password_hash
             approved = any(check_password_hash(a['password_hash'], invite_code) for a in admins)
-            # 또는 .env에 ADMIN_PASSWORD가 난어있다면 하로호환 지원
             if not approved and Config.ADMIN_PASSWORD and invite_code == Config.ADMIN_PASSWORD:
                 approved = True
             if not approved:
                 flash('관리자 승인 코드가 올바르지 않습니다.')
                 return render_template('register.html', need_invite=True)
-            user_id, err = create_user(username, password, is_admin=0)
+            user_id, err = create_user(username, password, is_admin=0, nickname=nickname, email=email)
 
         if err:
             flash(err)
@@ -160,6 +162,23 @@ def register():
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)
+    return redirect(url_for('login'))
+
+@app.route('/delete-account', methods=['POST'])
+@login_required
+def delete_account():
+    """현재 로그인된 사용자 계정과 모든 데이터를 영구 삭제 (Hard Delete)."""
+    user_id = session['user_id']
+    confirm_password = request.form.get('confirm_password', '')
+
+    user = get_user_by_id(user_id)
+    if not user or not check_password_hash(user['password_hash'], confirm_password):
+        flash('비밀번호가 일치하지 않습니다. 탈퇴가 취소되었습니다.')
+        return redirect(url_for('settings_page'))
+
+    delete_user(user_id)
+    session.pop('user_id', None)
+    flash('계정과 모든 데이터가 영구 삭제되었습니다.')
     return redirect(url_for('login'))
 
 # ── 메인 페이지 ──
