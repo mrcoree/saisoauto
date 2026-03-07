@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>대기열 관리 - 사이소</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">사이소</div>
+        <div class="nav-links">
+            <a href="/">상품 검색</a>
+            <a href="/queue" class="active">대기열 <span class="badge">{{ stats.pending }}</span></a>
+            <a href="/settings">설정</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>대기열 관리</h1>
+
+        <!-- 통계 -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-number">{{ stats.total }}</div>
+                <div class="stat-label">전체</div>
+            </div>
+            <div class="stat-card stat-pending">
+                <div class="stat-number">{{ stats.pending }}</div>
+                <div class="stat-label">대기중</div>
+            </div>
+            <div class="stat-card stat-processing">
+                <div class="stat-number">{{ stats.processing }}</div>
+                <div class="stat-label">처리중</div>
+            </div>
+            <div class="stat-card stat-completed">
+                <div class="stat-number">{{ stats.completed }}</div>
+                <div class="stat-label">완료</div>
+            </div>
+            <div class="stat-card stat-failed">
+                <div class="stat-number">{{ stats.failed }}</div>
+                <div class="stat-label">실패</div>
+            </div>
+        </div>
+
+        <!-- 발행 설정 -->
+        <div class="schedule-panel">
+            <h2>발행 설정</h2>
+            <div class="schedule-mode-tabs">
+                <button class="schedule-mode-btn active" data-mode="immediate"
+                    onclick="switchScheduleMode('immediate')">즉시 발행</button>
+                <button class="schedule-mode-btn" data-mode="interval" onclick="switchScheduleMode('interval')">예약
+                    발행</button>
+                <button class="schedule-mode-btn" data-mode="random" onclick="switchScheduleMode('random')">랜덤
+                    발행</button>
+            </div>
+
+            <!-- 즉시 발행 -->
+            <div class="schedule-mode-content active" id="mode-immediate">
+                <p class="mode-desc">선택한 항목을 지금 바로 발행합니다.</p>
+                <button class="btn btn-primary" onclick="scheduleImmediate()">선택 항목 즉시 발행</button>
+            </div>
+
+            <!-- 예약 발행 (기존 간격 모드) -->
+            <div class="schedule-mode-content" id="mode-interval">
+                <p class="mode-desc">시작 시각부터 고정 간격으로 순차 발행합니다.</p>
+                <div class="schedule-form">
+                    <div class="form-group">
+                        <label>시작 시각</label>
+                        <input type="datetime-local" id="startTime">
+                    </div>
+                    <div class="form-group">
+                        <label>간격 (시간)</label>
+                        <input type="number" id="intervalHours" value="{{ settings.interval_hours }}" min="1" max="48">
+                    </div>
+                    <button class="btn btn-primary" onclick="scheduleInterval()">선택 항목 예약 발행</button>
+                </div>
+            </div>
+
+            <!-- 랜덤 발행 -->
+            <div class="schedule-mode-content" id="mode-random">
+                <p class="mode-desc">하루 발행 횟수를 정하면 자연스러운 간격으로 분산 발행합니다. 간격이 너무 균일하거나 몰리지 않도록 자동 조절됩니다.</p>
+                <div class="schedule-form">
+                    <div class="form-group">
+                        <label>하루 발행 횟수</label>
+                        <input type="number" id="postsPerDay" value="3" min="1" max="20">
+                    </div>
+                    <div class="form-group">
+                        <label>활동 시간대</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="number" id="startHour" value="8" min="0" max="23" style="width:70px;"> 시
+                            <span>~</span>
+                            <input type="number" id="endHour" value="23" min="1" max="24" style="width:70px;"> 시
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="scheduleRandom()">선택 항목 랜덤 발행</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 선택 액션 바 -->
+        <div id="bulkActionBar" class="action-bar" style="display:none;">
+            <span><strong id="selectedCount">0</strong>개 선택됨</span>
+            <button class="btn btn-danger" onclick="deleteSelected()">선택 항목 삭제</button>
+            <button class="btn btn-secondary" onclick="clearSelection()">선택 해제</button>
+        </div>
+
+        <!-- 대기열 테이블 -->
+        <div class="table-container">
+            <table class="queue-table">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                        <th>상품명</th>
+                        <th>가격</th>
+                        <th>상태</th>
+                        <th>예정 시각</th>
+                        <th>결과</th>
+                        <th>액션</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr data-id="{{ item.id }}">
+                        <td><input type="checkbox" class="item-check" value="{{ item.id }}"></td>
+                        <td>
+                            <div class="item-name">
+                                {% if item.thumbnail_url %}
+                                <img src="{{ item.thumbnail_url }}" class="thumb-small" alt="">
+                                {% endif %}
+                                <span>{{ item.product_name[:50] }}</span>
+                            </div>
+                        </td>
+                        <td>{{ item.price }}</td>
+                        <td>
+                            <span class="status-badge status-{{ item.status }}">
+                                {% if item.status == 'pending' %}대기중
+                                {% elif item.status == 'processing' %}처리중
+                                {% elif item.status == 'completed' %}완료
+                                {% elif item.status == 'failed' %}실패
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            {% if item.scheduled_at %}
+                            {{ item.scheduled_at }}
+                            {% else %}
+                            <input type="datetime-local" class="schedule-input" data-id="{{ item.id }}"
+                                onchange="setIndividualSchedule({{ item.id }}, this.value)">
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.post_url %}
+                            <a href="{{ item.post_url }}" target="_blank">글 보기 →</a>
+                            {% elif item.error_message %}
+                            <span class="error-text" title="{{ item.error_message|e }}">
+                                {{ item.error_message[:30]|e }}...
+                            </span>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="action-cell">
+                            {% if item.status == 'pending' %}
+                            <button class="btn btn-sm btn-primary" onclick="runNow({{ item.id }})">즉시 실행</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteItem({{ item.id }})">삭제</button>
+                            {% elif item.status == 'failed' %}
+                            <button class="btn btn-sm btn-warning" onclick="retryItem({{ item.id }})">재시도</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteItem({{ item.id }})">삭제</button>
+                            {% elif item.status == 'processing' %}
+                            <span class="processing-indicator">⏳</span>
+                            {% else %}
+                            <button class="btn btn-sm btn-danger" onclick="deleteItem({{ item.id }})">삭제</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not items %}
+                    <tr>
+                        <td colspan="7" class="empty-row">대기열이 비어있습니다. 상품 검색에서 상품을 추가하세요.</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        /* ── 발행 모드 탭 전환 ── */
+        function switchScheduleMode(mode) {
+            document.querySelectorAll('.schedule-mode-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.schedule-mode-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`.schedule-mode-btn[data-mode="${mode}"]`).classList.add('active');
+            document.getElementById(`mode-${mode}`).classList.add('active');
+        }
+
+        /* ── 체크박스 ── */
+        function toggleSelectAll() {
+            const checked = document.getElementById('selectAll').checked;
+            document.querySelectorAll('.item-check').forEach(cb => cb.checked = checked);
+            updateBulkActionBar();
+        }
+
+        document.addEventListener('change', function (e) {
+            if (e.target.classList.contains('item-check')) updateBulkActionBar();
+        });
+
+        function updateBulkActionBar() {
+            const count = getSelectedIds().length;
+            document.getElementById('selectedCount').textContent = count;
+            document.getElementById('bulkActionBar').style.display = count > 0 ? 'flex' : 'none';
+        }
+
+        function clearSelection() {
+            document.getElementById('selectAll').checked = false;
+            document.querySelectorAll('.item-check').forEach(cb => cb.checked = false);
+            updateBulkActionBar();
+        }
+
+        function getSelectedIds() {
+            return Array.from(document.querySelectorAll('.item-check:checked'))
+                .map(cb => parseInt(cb.value));
+        }
+
+        /* ── 선택 항목 일괄 삭제 ── */
+        async function deleteSelected() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) return;
+
+            try {
+                const resp = await fetch('/api/queue/delete-bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_ids: ids }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error);
+                location.reload();
+            } catch (e) {
+                console.error('삭제 오류:', e.message);
+            }
+        }
+
+        /* ── 공통 스케줄 API 호출 ── */
+        async function callScheduleApi(body) {
+            const resp = await fetch('/api/queue/schedule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error);
+            return data;
+        }
+
+        /* ── 즉시 발행 ── */
+        async function scheduleImmediate() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) return;
+
+            try {
+                await callScheduleApi({ item_ids: ids, mode: 'immediate' });
+                location.reload();
+            } catch (e) {
+                console.error('즉시 발행 오류:', e.message);
+            }
+        }
+
+        /* ── 예약 발행 (간격) ── */
+        async function scheduleInterval() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) return;
+
+            const startTime = document.getElementById('startTime').value;
+            const intervalHours = parseInt(document.getElementById('intervalHours').value) || 6;
+
+            try {
+                await callScheduleApi({
+                    item_ids: ids,
+                    mode: 'interval',
+                    start_time: startTime || null,
+                    interval_hours: intervalHours,
+                });
+                location.reload();
+            } catch (e) {
+                console.error('예약 발행 오류:', e.message);
+            }
+        }
+
+        /* ── 랜덤 발행 ── */
+        async function scheduleRandom() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) return;
+
+            const postsPerDay = parseInt(document.getElementById('postsPerDay').value) || 3;
+            const startHour = parseInt(document.getElementById('startHour').value) || 8;
+            const endHour = parseInt(document.getElementById('endHour').value) || 23;
+
+            if (startHour >= endHour) return;
+
+            try {
+                await callScheduleApi({
+                    item_ids: ids,
+                    mode: 'random',
+                    posts_per_day: postsPerDay,
+                    start_hour: startHour,
+                    end_hour: endHour,
+                });
+                location.reload();
+            } catch (e) {
+                console.error('랜덤 발행 오류:', e.message);
+            }
+        }
+
+        /* ── 개별 스케줄 설정 ── */
+        async function setIndividualSchedule(itemId, timeValue) {
+            if (!timeValue) return;
+            try {
+                await callScheduleApi({
+                    item_ids: [itemId],
+                    mode: 'individual',
+                    schedules: { [itemId]: timeValue.replace('T', ' ') + ':00' },
+                });
+            } catch (e) {
+                console.error('스케줄 설정 오류:', e.message);
+            }
+        }
+
+        /* ── 단건 즉시 실행 ── */
+        async function runNow(itemId) {
+            try {
+                const resp = await fetch(`/api/queue/${itemId}/run-now`, { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error);
+                location.reload();
+            } catch (e) {
+                console.error('즉시 실행 오류:', e.message);
+            }
+        }
+
+        async function retryItem(itemId) {
+            try {
+                const resp = await fetch(`/api/queue/${itemId}/retry`, { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error);
+                location.reload();
+            } catch (e) {
+                console.error('재시도 오류:', e.message);
+            }
+        }
+
+        async function deleteItem(itemId) {
+            try {
+                const resp = await fetch(`/api/queue/${itemId}`, { method: 'DELETE' });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error);
+                location.reload();
+            } catch (e) {
+                console.error('삭제 오류:', e.message);
+            }
+        }
+
+        // 10초마다 자동 새로고침 (처리중인 항목이 있을 때)
+        {% if stats.processing > 0 %}
+        setInterval(() => location.reload(), 10000);
+        {% endif %}
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>설정 - 사이소</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">사이소</div>
+        <div class="nav-links">
+            <a href="/">상품 검색</a>
+            <a href="/queue">대기열</a>
+            <a href="/settings" class="active">설정</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>설정</h1>
+
+        {% if missing %}
+        <div class="alert alert-warning">
+            ⚠️ 다음 설정이 누락되었습니다: <strong>{{ missing|join(', ') }}</strong>
+        </div>
+        {% endif %}
+
+        <!-- 쿠팡 파트너스 API -->
+        <div class="settings-section">
+            <h2>쿠팡 파트너스 API</h2>
+            <p class="section-desc">partners.coupang.com에서 API 키를 발급받으세요.</p>
+            <div class="form-group">
+                <label>Access Key</label>
+                <input type="text" id="coupangAccessKey"
+                       placeholder="{{ config.COUPANG_ACCESS_KEY }}">
+                <small class="hint">현재: {{ config.COUPANG_ACCESS_KEY }} (변경 시에만 입력)</small>
+            </div>
+            <div class="form-group">
+                <label>Secret Key</label>
+                <input type="password" id="coupangSecretKey"
+                       placeholder="{{ config.COUPANG_SECRET_KEY }}">
+                <small class="hint">현재: {{ config.COUPANG_SECRET_KEY }} (변경 시에만 입력)</small>
+            </div>
+            <button class="btn btn-secondary" onclick="testCoupang()">연결 테스트</button>
+            <span id="coupangTestResult" class="test-result"></span>
+        </div>
+
+        <!-- OpenAI -->
+        <div class="settings-section">
+            <h2>OpenAI API</h2>
+            <p class="section-desc">platform.openai.com에서 API 키를 발급받으세요.</p>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="openaiApiKey"
+                       placeholder="{{ config.OPENAI_API_KEY }}">
+                <small class="hint">현재: {{ config.OPENAI_API_KEY }} (변경 시에만 입력)</small>
+            </div>
+        </div>
+
+        <!-- Google Gemini -->
+        <div class="settings-section">
+            <h2>Google Gemini API</h2>
+            <p class="section-desc">aistudio.google.com에서 API 키를 발급받으세요. (이미지 생성용)</p>
+            <div class="form-group">
+                <label>Gemini API Key</label>
+                <input type="password" id="geminiApiKey"
+                       placeholder="{{ config.GEMINI_API_KEY }}">
+                <small class="hint">현재: {{ config.GEMINI_API_KEY }} (변경 시에만 입력)</small>
+            </div>
+        </div>
+
+        <!-- WordPress -->
+        <div class="settings-section">
+            <h2>워드프레스</h2>
+            <p class="section-desc">워드프레스 관리자 → 사용자 → 프로필 → Application Passwords에서 비밀번호를 생성하세요.</p>
+            <div class="form-group">
+                <label>사이트 URL</label>
+                <input type="url" id="wpUrl" placeholder="https://your-site.com"
+                       value="{{ config.WP_URL }}">
+            </div>
+            <div class="form-group">
+                <label>사용자명</label>
+                <input type="text" id="wpUsername" placeholder="admin"
+                       value="{{ config.WP_USERNAME }}">
+            </div>
+            <div class="form-group">
+                <label>App Password</label>
+                <input type="password" id="wpAppPassword"
+                       placeholder="{{ config.WP_APP_PASSWORD }}">
+                <small class="hint">현재: {{ config.WP_APP_PASSWORD }} (변경 시에만 입력)</small>
+            </div>
+            <button class="btn btn-secondary" onclick="testWP()">연결 테스트</button>
+            <span id="wpTestResult" class="test-result"></span>
+        </div>
+
+        <!-- 스케줄 설정 -->
+        <div class="settings-section">
+            <h2>스케줄 설정</h2>
+            <div class="form-group">
+                <label>모드</label>
+                <select id="scheduleMode">
+                    <option value="interval" {{ 'selected' if settings and settings.mode == 'interval' }}>고정 간격</option>
+                    <option value="daily" {{ 'selected' if settings and settings.mode == 'daily' }}>매일 지정 시간</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>간격 (시간)</label>
+                <input type="number" id="intervalHours" min="1" max="48"
+                       value="{{ settings.interval_hours if settings else 6 }}">
+            </div>
+            <div class="form-group">
+                <label>일일 최대 포스팅 수</label>
+                <input type="number" id="maxPostsPerDay" min="1" max="20"
+                       value="{{ settings.max_posts_per_day if settings else 5 }}">
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="autoPublish"
+                           {{ 'checked' if settings and settings.auto_publish }}>
+                    자동 발행 (체크 해제 시 draft로 저장)
+                </label>
+            </div>
+        </div>
+
+        <!-- 저장 버튼 -->
+        <div class="save-section">
+            <button class="btn btn-primary btn-lg" onclick="saveSettings()">설정 저장</button>
+            <span id="saveResult" class="test-result"></span>
+        </div>
+    </div>
+
+    <script>
+        async function saveSettings() {
+            const data = {
+                coupang_access_key: document.getElementById('coupangAccessKey').value,
+                coupang_secret_key: document.getElementById('coupangSecretKey').value,
+                openai_api_key: document.getElementById('openaiApiKey').value,
+                gemini_api_key: document.getElementById('geminiApiKey').value,
+                wp_url: document.getElementById('wpUrl').value,
+                wp_username: document.getElementById('wpUsername').value,
+                wp_app_password: document.getElementById('wpAppPassword').value,
+                schedule_mode: document.getElementById('scheduleMode').value,
+                interval_hours: document.getElementById('intervalHours').value,
+                max_posts_per_day: document.getElementById('maxPostsPerDay').value,
+                auto_publish: document.getElementById('autoPublish').checked,
+            };
+
+            const result = document.getElementById('saveResult');
+            try {
+                const resp = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data),
+                });
+                const json = await resp.json();
+                if (resp.status === 401) {
+                    alert('인증이 필요합니다. 페이지를 새로고침하세요.');
+                    return;
+                }
+                if (!resp.ok) throw new Error(json.error);
+                result.textContent = '✅ ' + json.message;
+                result.className = 'test-result success';
+            } catch (e) {
+                result.textContent = '❌ ' + e.message;
+                result.className = 'test-result error';
+            }
+        }
+
+        async function testCoupang() {
+            const result = document.getElementById('coupangTestResult');
+            result.textContent = '테스트 중...';
+            result.className = 'test-result';
+
+            // 먼저 현재 값 저장
+            await saveSettings();
+
+            try {
+                const resp = await fetch('/api/settings/test-coupang', {method: 'POST'});
+                const data = await resp.json();
+                result.textContent = data.success ? '✅ ' + data.message : '❌ ' + data.message;
+                result.className = 'test-result ' + (data.success ? 'success' : 'error');
+            } catch (e) {
+                result.textContent = '❌ ' + e.message;
+                result.className = 'test-result error';
+            }
+        }
+
+        async function testWP() {
+            const result = document.getElementById('wpTestResult');
+            result.textContent = '테스트 중...';
+            result.className = 'test-result';
+
+            // 먼저 현재 값 저장
+            await saveSettings();
+
+            try {
+                const resp = await fetch('/api/settings/test-wp', {method: 'POST'});
+                const data = await resp.json();
+                result.textContent = data.success ? '✅ ' + data.message : '❌ ' + data.message;
+                result.className = 'test-result ' + (data.success ? 'success' : 'error');
+            } catch (e) {
+                result.textContent = '❌ ' + e.message;
+                result.className = 'test-result error';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+# 사이소(Saiso) 프로젝트 .gitignore
+
+# 환경변수 (API 키 포함)
+.env
+
+# SQLite 데이터베이스
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 가상환경
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 임시 파일
+/tmp/
+*.tmp
+instance/
+
+# OS
+.DS_Store
+Thumbs.db

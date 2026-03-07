@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사이소 - 쿠팡 파트너스 자동 포스팅</title>
+    <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">사이소</div>
+        <div class="nav-links">
+            <a href="/" class="active">상품 검색</a>
+            <a href="/queue">대기열 <span class="badge" id="queueBadge">{{ stats.pending }}</span></a>
+            <a href="/settings">설정</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>상품 검색</h1>
+
+        <!-- API 호출 경고 -->
+        <div id="rateLimitWarning" class="alert alert-warning" style="display:none;"></div>
+
+        <!-- 탭 네비게이션 -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="search" onclick="switchTab('search')">키워드 검색</button>
+            <button class="tab-btn" data-tab="goldbox" onclick="switchTab('goldbox')">오늘의 특가</button>
+            <button class="tab-btn" data-tab="best" onclick="switchTab('best')">베스트 상품</button>
+        </div>
+
+        <!-- 탭 1: 키워드 검색 -->
+        <div class="tab-content active" id="tab-search">
+            <div class="search-box">
+                <input type="text" id="keyword" placeholder="검색 키워드를 입력하세요 (예: 무선 청소기)" autofocus>
+                <button id="searchBtn" onclick="searchProducts()">검색</button>
+            </div>
+        </div>
+
+        <!-- 탭 2: 오늘의 특가 (골드박스) -->
+        <div class="tab-content" id="tab-goldbox">
+            <div class="search-box">
+                <button class="btn btn-primary btn-lg" onclick="loadGoldbox()" style="width:100%;">특가 상품 불러오기</button>
+            </div>
+        </div>
+
+        <!-- 탭 3: 베스트 상품 -->
+        <div class="tab-content" id="tab-best">
+            <div class="category-tags">
+                {% for cat in categories %}
+                <button class="category-tag" data-id="{{ cat.id }}" onclick="selectCategory(this)">{{ cat.name
+                    }}</button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 공통: 로딩 -->
+        <div id="loading" class="loading" style="display:none;">
+            <div class="spinner"></div>
+            <span id="loadingText">쿠팡 파트너스 API에서 검색 중...</span>
+        </div>
+
+        <!-- 공통: 에러 -->
+        <div id="error" class="alert alert-error" style="display:none;"></div>
+
+        <!-- 공통: 상품 그리드 -->
+        <div id="productGrid" class="product-grid"></div>
+    </div>
+
+    <script>
+        const selectedProducts = new Map();
+        const queuedItems = new Map();  // index → queue item ID
+        let currentTab = 'search';
+        const tabCache = {};  // 탭별 상품 결과 캐시
+
+        /* ── 탭 전환 ── */
+        function switchTab(tabName) {
+            if (tabName === currentTab) return;
+
+            // 1) 현재 탭 상태 저장 (상품 + 선택 + 대기열 ID)
+            if (!tabCache[currentTab]) tabCache[currentTab] = {};
+            tabCache[currentTab].selected = new Map(selectedProducts);
+            tabCache[currentTab].queued = new Map(queuedItems);
+
+            // 2) UI 탭 전환
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+            document.querySelector(`.tab-btn[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+
+            // 3) 선택 상태 초기화
+            selectedProducts.clear();
+            queuedItems.clear();
+            currentTab = tabName;
+
+            // 4) 캐시된 결과 복원
+            const cached = tabCache[tabName];
+            if (cached && cached.products && cached.products.length > 0) {
+                renderProducts(cached.products);
+            } else {
+                document.getElementById('productGrid').innerHTML = '';
+            }
+
+            // 5) 선택/대기열 상태 복원 + DOM 반영
+            if (cached && cached.selected && cached.selected.size > 0) {
+                cached.selected.forEach((product, index) => {
+                    selectedProducts.set(index, product);
+                });
+            }
+            if (cached && cached.queued && cached.queued.size > 0) {
+                cached.queued.forEach((id, index) => {
+                    queuedItems.set(index, id);
+                });
+            }
+            restoreSelectionUI();
+            saveTabCache();
+        }
+
+        /* ── API 호출 횟수 추적 (localStorage, 분당 제한 — 공식 문서 기준 분당 100회) ── */
+        function trackApiCall(apiType) {
+            const KEY = `saiso_api_${apiType}`;
+            const now = Date.now();
+            const oneMinute = 60 * 1000;
+            let calls = JSON.parse(localStorage.getItem(KEY) || '[]');
+            calls = calls.filter(ts => now - ts < oneMinute);
+            calls.push(now);
+            localStorage.setItem(KEY, JSON.stringify(calls));
+
+            const warning = document.getElementById('rateLimitWarning');
+            const limit = 100;  // 공식 문서: 기본 QPS 분당 100회
+            const labels = { search: '검색', best: '베스트 카테고리' };
+            if (calls.length >= limit) {
+                warning.textContent = `${labels[apiType]} API를 최근 1분 동안 ${calls.length}회 호출했습니다 (제한: ${limit}회/분). 초과 시 429 에러가 발생할 수 있습니다.`;
+                warning.style.display = 'block';
+                return false;
+            } else {
+                warning.style.display = 'none';
+                return true;
+            }
+        }
+
+        /* ── 공통 로딩/에러 처리 ── */
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('productGrid').innerHTML = '';
+            selectedProducts.clear();
+            queuedItems.clear();
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        /* ── 탭 1: 키워드 검색 ── */
+        document.getElementById('keyword').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') searchProducts();
+        });
+
+        async function searchProducts() {
+            const keyword = document.getElementById('keyword').value.trim();
+            if (!keyword) return;
+
+            showLoading('쿠팡 파트너스 API에서 검색 중...');
+            trackApiCall('search');
+
+            try {
+                const resp = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keyword }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || '검색 실패');
+                tabCache['search'] = { products: data.products };
+                saveTabCache();
+                renderProducts(data.products);
+            } catch (e) {
+                showError(e.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        /* ── 탭 2: 골드박스 (웹 스크래핑 — API 미사용) ── */
+        async function loadGoldbox() {
+            showLoading('골드박스 특가 상품을 불러오는 중... (최초 로딩 시 시간이 걸릴 수 있습니다)');
+
+            try {
+                const resp = await fetch('/api/goldbox', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || '골드박스 조회 실패');
+                tabCache['goldbox'] = { products: data.products };
+                saveTabCache();
+                renderProducts(data.products);
+            } catch (e) {
+                showError(e.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        /* ── 탭 3: 베스트 카테고리 (태그 선택) ── */
+        function selectCategory(el) {
+            document.querySelectorAll('.category-tag').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            loadBestCategory(el.dataset.id, el.textContent);
+        }
+
+        async function loadBestCategory(categoryId, catName) {
+            showLoading(`${catName} 베스트 상품을 불러오는 중...`);
+            trackApiCall('best');
+
+            try {
+                const resp = await fetch('/api/best-categories', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category_id: categoryId }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || '베스트 카테고리 조회 실패');
+                tabCache['best'] = { products: data.products };
+                saveTabCache();
+                renderProducts(data.products);
+            } catch (e) {
+                showError(e.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        /* [FIX #4] XSS 방지를 위한 HTML escape */
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
+
+        function escapeAttr(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        /* ── 공통: 상품 렌더링 ── */
+        function renderProducts(products) {
+            const grid = document.getElementById('productGrid');
+
+            if (!products || products.length === 0) {
+                grid.innerHTML = '<p class="empty">검색 결과가 없습니다.</p>';
+                return;
+            }
+
+            grid.innerHTML = products.map((p, i) => {
+                const viewUrl = escapeAttr(p.affiliate_url || p.product_url || '#');
+                const thumbUrl = escapeAttr(p.thumbnail_url || '');
+                const name = escapeHtml(p.product_name || '');
+                const price = escapeHtml(p.price || '');
+                const category = escapeHtml(p.category || '');
+                return `
+                <div class="product-card" id="card-${i}" onclick="toggleSelect(${i}, this)">
+                    <div class="card-checkbox">
+                        <input type="checkbox" id="check-${i}" onclick="event.stopPropagation(); toggleSelect(${i}, document.getElementById('card-${i}'), true)">
+                    </div>
+                    <div class="card-image">
+                        <img src="${thumbUrl}" alt="${escapeAttr(p.product_name)}" loading="lazy"
+                             onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%2250%%22 x=%2250%%22 text-anchor=%22middle%22 font-size=%2240%22>📦</text></svg>'">
+                        ${p.is_rocket ? '<span class="badge-rocket">🚀 로켓배송</span>' : ''}
+                    </div>
+                    <div class="card-info">
+                        <h3 class="card-title">${name}</h3>
+                        <div class="card-price">${price}</div>
+                        ${category ? `<div class="card-category">${category}</div>` : ''}
+                        <div class="card-actions">
+                            <a href="${viewUrl}" target="_blank" rel="noopener" class="card-link" onclick="event.stopPropagation()">쿠팡에서 보기 →</a>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+
+            products.forEach((p, i) => {
+                document.getElementById(`card-${i}`).dataset.product = JSON.stringify(p);
+            });
+        }
+
+        /* ── 선택 상태 DOM 복원 ── */
+        function restoreSelectionUI() {
+            selectedProducts.forEach((product, index) => {
+                const card = document.getElementById(`card-${index}`);
+                const checkbox = document.getElementById(`check-${index}`);
+                if (card) card.classList.add('selected');
+                if (checkbox) checkbox.checked = true;
+            });
+        }
+
+        /* ── 공통: 체크박스 토글 → 자동 대기열 등록/삭제 ── */
+        async function toggleSelect(index, card, fromCheckbox) {
+            const checkbox = document.getElementById(`check-${index}`);
+            // 카드 클릭 시에만 수동 토글 (체크박스 직접 클릭은 브라우저가 이미 토글함)
+            if (!fromCheckbox) checkbox.checked = !checkbox.checked;
+
+            if (checkbox.checked) {
+                card.classList.add('selected');
+                const product = JSON.parse(card.dataset.product);
+                selectedProducts.set(index, product);
+                await addToQueueAuto(index, product);
+            } else {
+                card.classList.remove('selected');
+                selectedProducts.delete(index);
+                await removeFromQueueAuto(index);
+            }
+        }
+
+        async function addToQueueAuto(index, product) {
+            try {
+                const resp = await fetch('/api/queue/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ products: [product] }),
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || '추가 실패');
+
+                // 반환된 ID 저장 (삭제 시 사용)
+                if (data.ids && data.ids.length > 0) {
+                    queuedItems.set(index, data.ids[0]);
+                }
+                updateBadge();
+                saveTabCache();
+            } catch (e) {
+                // 실패 시 체크 해제
+                const card = document.getElementById(`card-${index}`);
+                const checkbox = document.getElementById(`check-${index}`);
+                if (card) card.classList.remove('selected');
+                if (checkbox) checkbox.checked = false;
+                selectedProducts.delete(index);
+            }
+        }
+
+        async function removeFromQueueAuto(index) {
+            const queueId = queuedItems.get(index);
+            if (!queueId) return;
+
+            try {
+                const resp = await fetch(`/api/queue/${queueId}`, { method: 'DELETE' });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || '삭제 실패');
+                queuedItems.delete(index);
+                updateBadge();
+                saveTabCache();
+            } catch (e) {
+                console.error('대기열 삭제 실패:', e.message);
+            }
+        }
+
+        async function updateBadge() {
+            try {
+                const resp = await fetch('/api/queue/stats');
+                const stats = await resp.json();
+                document.getElementById('queueBadge').textContent = stats.pending;
+            } catch (e) { }
+        }
+
+        /* ── sessionStorage: 페이지 이동 후에도 상품 목록 + 선택 상태 유지 ── */
+        function saveTabCache() {
+            // 현재 탭의 선택 상태도 tabCache에 반영
+            if (!tabCache[currentTab]) tabCache[currentTab] = {};
+            tabCache[currentTab].selected = new Map(selectedProducts);
+            tabCache[currentTab].queued = new Map(queuedItems);
+
+            const data = {};
+            for (const tab in tabCache) {
+                if (tabCache[tab]) {
+                    const entry = {};
+                    if (tabCache[tab].products) entry.products = tabCache[tab].products;
+                    if (tabCache[tab].selected && tabCache[tab].selected.size > 0) {
+                        entry.selected = Array.from(tabCache[tab].selected.entries());
+                    }
+                    if (tabCache[tab].queued && tabCache[tab].queued.size > 0) {
+                        entry.queued = Array.from(tabCache[tab].queued.entries());
+                    }
+                    data[tab] = entry;
+                }
+            }
+            data._currentTab = currentTab;
+            sessionStorage.setItem('saiso_tabCache', JSON.stringify(data));
+        }
+
+        function restoreTabCache() {
+            try {
+                const raw = sessionStorage.getItem('saiso_tabCache');
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                const savedTab = data._currentTab || 'search';
+
+                for (const tab in data) {
+                    if (tab === '_currentTab') continue;
+                    tabCache[tab] = {};
+                    if (data[tab].products) tabCache[tab].products = data[tab].products;
+                    if (data[tab].selected) tabCache[tab].selected = new Map(data[tab].selected);
+                    if (data[tab].queued) tabCache[tab].queued = new Map(data[tab].queued);
+                }
+
+                // 저장된 탭에 상품이 있으면 해당 탭으로 전환 후 렌더링
+                if (tabCache[savedTab] && tabCache[savedTab].products && tabCache[savedTab].products.length > 0) {
+                    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                    document.querySelector(`.tab-btn[data-tab="${savedTab}"]`).classList.add('active');
+                    document.getElementById(`tab-${savedTab}`).classList.add('active');
+                    currentTab = savedTab;
+                    renderProducts(tabCache[savedTab].products);
+
+                    // 선택/대기열 상태 복원
+                    const cached = tabCache[savedTab];
+                    if (cached.selected) {
+                        cached.selected.forEach((product, index) => selectedProducts.set(index, product));
+                    }
+                    if (cached.queued) {
+                        cached.queued.forEach((id, index) => queuedItems.set(index, id));
+                    }
+                    restoreSelectionUI();
+                }
+            } catch (e) { }
+        }
+
+        // 페이지 로드 시 복원
+        restoreTabCache();
+    </script>
+</body>
+
+</html>

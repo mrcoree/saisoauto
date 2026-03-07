@@ -1,0 +1,10 @@
+flask==3.1.0
+python-dotenv==1.0.1
+selenium==4.27.1
+webdriver-manager==4.0.2
+beautifulsoup4==4.12.3
+openai==1.58.1
+requests==2.32.3
+Pillow==11.1.0
+google-genai
+apscheduler==3.10.4
