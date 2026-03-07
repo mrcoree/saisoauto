@@ -13,8 +13,10 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', '')           # 없으면 instance/secret_key.txt 자동 생성
     FERNET_KEY = os.getenv('FERNET_KEY', '')           # API 키 AES-256 암호화용 마스터 키
 
-    # SQLite DB 경로
-    DB_PATH = os.path.join(os.path.dirname(__file__), 'saiso.db')
+    # SQLite DB 경로 (instance/ 디렉토리에 저장하여 Docker 볼륨으로 영구 보존)
+    _instance_dir = os.path.join(os.path.dirname(__file__), 'instance')
+    os.makedirs(_instance_dir, exist_ok=True)
+    DB_PATH = os.path.join(_instance_dir, 'saiso.db')
 
     # ── 아래 항목들은 SaaS 전환 후 각 사용자가 직접 [설정] 탭에서 입력합니다 ──
     # 이제 .env가 아닌 DB의 users 테이블에서 사용자별로 조회합니다.

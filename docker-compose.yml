@@ -10,6 +10,5 @@ services:
     volumes:
       - ./instance:/app/instance
       - ./.env:/app/.env
-      - ./saiso.db:/app/saiso.db
     environment:
       - TZ=Asia/Seoul
