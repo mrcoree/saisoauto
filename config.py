@@ -26,6 +26,7 @@ class Config:
     # 보안
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
     SECRET_KEY = os.getenv('SECRET_KEY', '')
+    FERNET_KEY = os.getenv('FERNET_KEY', '')  # API 키 암호화용 마스터 키
 
     # SQLite
     DB_PATH = os.path.join(os.path.dirname(__file__), 'saiso.db')
@@ -62,3 +63,4 @@ class Config:
         cls.CHROME_HEADLESS = os.getenv('CHROME_HEADLESS', 'true').lower() == 'true'
         cls.ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
         cls.SECRET_KEY = os.getenv('SECRET_KEY', '')
+        cls.FERNET_KEY = os.getenv('FERNET_KEY', '')

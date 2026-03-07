@@ -3,10 +3,57 @@ import os
 from datetime import datetime
 from contextlib import contextmanager
 from werkzeug.security import generate_password_hash, check_password_hash
+from cryptography.fernet import Fernet, InvalidToken
 
 from config import Config
 
 DB_PATH = Config.DB_PATH
+
+# ── Fernet AES-256 암호화 헬퍼 ──
+
+_fernet = None
+
+def _get_fernet():
+    """Fernet 인스턴스 반환 (지연 로딩)."""
+    global _fernet
+    if _fernet is None and Config.FERNET_KEY:
+        _fernet = Fernet(Config.FERNET_KEY.encode())
+    return _fernet
+
+# API 키 컨럼명 목록 (이 컨럼만 암호화 대상)
+_API_KEY_COLUMNS = {
+    'coupang_access_key', 'coupang_secret_key',
+    'openai_api_key', 'gemini_api_key',
+    'wp_url', 'wp_username', 'wp_app_password',
+}
+
+def _encrypt(value: str) -> str:
+    """API 키 등 민감 정보를 암호화 (Fernet 콌 없으면 평문 그대로)."""
+    fernet = _get_fernet()
+    if not fernet or not value:
+        return value
+    return fernet.encrypt(value.encode()).decode()
+
+def _decrypt(value: str) -> str:
+    """DB에서 라은 암호문을 복호화 (평문이난 눁비 프리피켜시도 허용)."""
+    fernet = _get_fernet()
+    if not fernet or not value:
+        return value
+    try:
+        return fernet.decrypt(value.encode()).decode()
+    except (InvalidToken, Exception):
+        # 이미 평문으로 저장된 값은 그대로 반환 (Migration Safe)
+        return value
+
+def _decrypt_user_row(user: dict) -> dict:
+    """user dict에서 API 키 컨럼들만 교체 복호화."""
+    if not user:
+        return user
+    result = dict(user)
+    for col in _API_KEY_COLUMNS:
+        if col in result and result[col]:
+            result[col] = _decrypt(result[col])
+    return result
 
 @contextmanager
 def get_db():
@@ -99,12 +146,12 @@ def create_user(username, password):
 def get_user_by_username(username):
     with get_db() as conn:
         row = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
-        return dict(row) if row else None
+        return _decrypt_user_row(dict(row)) if row else None
 
 def get_user_by_id(user_id):
     with get_db() as conn:
         row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-        return dict(row) if row else None
+        return _decrypt_user_row(dict(row)) if row else None
 
 def update_user_keys(user_id, keys_dict):
     with get_db() as conn:
@@ -112,7 +159,11 @@ def update_user_keys(user_id, keys_dict):
         values = []
         for col, val in keys_dict.items():
             updates.append(f"{col} = ?")
-            values.append(val)
+            # API 키 컨럼은 저장 전 암호화
+            if col in _API_KEY_COLUMNS:
+                values.append(_encrypt(val))
+            else:
+                values.append(val)
         if not updates:
             return
 
