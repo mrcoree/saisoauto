@@ -80,6 +80,7 @@ def init_db():
                 nickname TEXT,
                 email TEXT,
                 is_admin INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
                 coupang_access_key TEXT,
                 coupang_secret_key TEXT,
                 openai_api_key TEXT,
@@ -128,12 +129,12 @@ def init_db():
 
 # ── Users CRUD ──
 
-def create_user(username, password, is_admin=0, nickname=None, email=None):
+def create_user(username, password, is_admin=0, nickname=None, email=None, status='pending'):
     with get_db() as conn:
         try:
             conn.execute(
-                'INSERT INTO users (username, password_hash, is_admin, nickname, email) VALUES (?, ?, ?, ?, ?)',
-                (username, generate_password_hash(password), is_admin, nickname, email)
+                'INSERT INTO users (username, password_hash, is_admin, nickname, email, status) VALUES (?, ?, ?, ?, ?, ?)',
+                (username, generate_password_hash(password), is_admin, nickname, email, status)
             )
             user_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
             # 기본 스케줄 설정도 함께 생성
@@ -145,6 +146,20 @@ def create_user(username, password, is_admin=0, nickname=None, email=None):
             return user_id, None
         except sqlite3.IntegrityError:
             return None, "이미 존재하는 아이디입니다."
+
+def get_pending_users():
+    """status='pending'인 가입 신청 목록."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, username, nickname, email, created_at FROM users WHERE status = 'pending' ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+def set_user_status(user_id, status):
+    """user_id의 status를 'active' 또는 'rejected'로 변경."""
+    with get_db() as conn:
+        conn.execute('UPDATE users SET status = ? WHERE id = ?', (status, user_id))
+        conn.commit()
 
 def delete_user(user_id):
     """user_id에 해당하는 사용자와 모든 관련 데이터를 DB에서 완전히 삭제 (Hard Delete)."""

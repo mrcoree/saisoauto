@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 패널 - Saiso</title>
+    <link rel="stylesheet" href="/static/style.css?v=2">
+    <style>
+        .admin-container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            color: #333;
+        }
+
+        .badge-count {
+            display: inline-block;
+            background: #dc3545;
+            color: white;
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: 13px;
+            margin-left: 8px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            margin-bottom: 16px;
+        }
+
+        .user-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .user-info {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .user-info .name {
+            font-weight: 600;
+            font-size: 16px;
+            color: #212529;
+        }
+
+        .user-info .meta {
+            font-size: 13px;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-approve {
+            padding: 8px 20px;
+            background: #198754;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-approve:hover {
+            background: #157347;
+        }
+
+        .btn-reject {
+            padding: 8px 20px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-reject:hover {
+            background: #5c636a;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .flash-messages {
+            margin-bottom: 16px;
+        }
+
+        .flash-messages p {
+            background: #d1e7dd;
+            border: 1px solid #badbcc;
+            color: #0f5132;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 0;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #0d6efd;
+            text-decoration: none;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body style="background-color: #f8f9fa;">
+    <div class="admin-container">
+        <a href="{{ url_for('index') }}" class="back-link">← 메인으로 돌아가기</a>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for message in messages %}
+            <p>{{ message }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="page-title">
+            👤 가입 승인 관리
+            {% if pending %}
+            <span class="badge-count">{{ pending|length }}명 대기 중</span>
+            {% endif %}
+        </div>
+
+        {% if pending %}
+        {% for user in pending %}
+        <div class="card">
+            <div class="user-row">
+                <div class="user-info">
+                    <div class="name">{{ user.nickname }} <span style="font-weight:400; color:#6c757d;">(@{{
+                            user.username }})</span></div>
+                    <div class="meta">📧 {{ user.email }} &nbsp;·&nbsp; 🕐 신청일: {{ user.created_at }}</div>
+                </div>
+                <div class="action-btns">
+                    <form method="POST" action="{{ url_for('admin_approve', target_id=user.id) }}" style="margin:0;">
+                        <button type="submit" class="btn-approve">✅ 승인</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_reject', target_id=user.id) }}"
+                        onsubmit="return confirm('{{ user.nickname }}님의 가입을 거절하시겠습니까?')" style="margin:0;">
+                        <button type="submit" class="btn-reject">❌ 거절</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <div style="font-size: 48px; margin-bottom: 12px;">🎉</div>
+            <div style="font-size: 18px; font-weight: 600;">대기 중인 가입 신청이 없습니다.</div>
+            <div style="margin-top: 8px; font-size: 14px;">새로운 신청이 들어오면 여기에 표시됩니다.</div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+
+</html>

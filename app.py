@@ -17,7 +17,8 @@ from models import (
     delete_queue_item, reset_item, get_schedule_settings,
     update_schedule_settings, get_queue_stats,
     create_user, get_user_by_username, get_user_by_id, update_user_keys,
-    get_user_count, get_admin_users, delete_user
+    get_user_count, get_admin_users, delete_user,
+    get_pending_users, set_user_status
 )
 from coupang_api import CoupangAPI
 from scraper import CoupangScraper
@@ -112,6 +113,12 @@ def login():
         password = request.form.get('password')
         user = get_user_by_username(username)
         if user and check_password_hash(user['password_hash'], password):
+            if user.get('status') == 'pending':
+                flash('관리자가 아직 승인하지 않은 계정입니다. 승인 후 로그인하세요.')
+                return render_template('login.html')
+            if user.get('status') == 'rejected':
+                flash('거절된 계정입니다. 관리자에게 문의하세요.')
+                return render_template('login.html')
             session['user_id'] = user['id']
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
@@ -129,35 +136,29 @@ def register():
 
         if not username or not password or not nickname or not email:
             flash('모든 필수 항목을 입력해 주세요.')
-            user_count = get_user_count()
-            return render_template('register.html', need_invite=(user_count > 0))
+            return render_template('register.html')
 
         user_count = get_user_count()
 
         if user_count == 0:
-            # 첨 번째 사용자는 자동으로 최고 관리자(is_admin=1)가 됩니다
-            user_id, err = create_user(username, password, is_admin=1, nickname=nickname, email=email)
+            # 첨 번째 사용자는 자동으로 최고 관리자(is_admin=1) + 즐시 활성(active)
+            user_id, err = create_user(username, password, is_admin=1,
+                                       nickname=nickname, email=email, status='active')
+            if not err:
+                session['user_id'] = user_id
+                return redirect(url_for('settings_page'))
         else:
-            # 2번째부터는 기존 관리자의 승인 코드 확인
-            invite_code = request.form.get('invite_code', '')
-            admins = get_admin_users()
-            from werkzeug.security import check_password_hash
-            approved = any(check_password_hash(a['password_hash'], invite_code) for a in admins)
-            if not approved and Config.ADMIN_PASSWORD and invite_code == Config.ADMIN_PASSWORD:
-                approved = True
-            if not approved:
-                flash('관리자 승인 코드가 올바르지 않습니다.')
-                return render_template('register.html', need_invite=True)
-            user_id, err = create_user(username, password, is_admin=0, nickname=nickname, email=email)
+            # 2번째부터는 pending 상태로 등록된 후 관리자 승인 대기
+            user_id, err = create_user(username, password, is_admin=0,
+                                       nickname=nickname, email=email, status='pending')
+            if not err:
+                flash('가입 신청이 접수되었습니다. 관리자의 승인 후 로그인하실 수 있습니다.')
+                return redirect(url_for('login'))
 
         if err:
             flash(err)
-        else:
-            session['user_id'] = user_id
-            return redirect(url_for('settings_page'))
 
-    user_count = get_user_count()
-    return render_template('register.html', need_invite=(user_count > 0))
+    return render_template('register.html')
 
 @app.route('/logout')
 def logout():
@@ -181,7 +182,41 @@ def delete_account():
     flash('계정과 모든 데이터가 영구 삭제되었습니다.')
     return redirect(url_for('login'))
 
-# ── 메인 페이지 ──
+# ── 관리자 전용 패널 ──
+
+def admin_required(f):
+    """관리자(is_admin=1)만 접근 가능한 데코레이터."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        user = get_user_by_id(session['user_id'])
+        if not user or not user.get('is_admin'):
+            flash('관리자만 접근할 수 있습니다.')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/admin')
+@admin_required
+def admin_panel():
+    pending = get_pending_users()
+    return render_template('admin.html', pending=pending)
+
+@app.route('/admin/approve/<int:target_id>', methods=['POST'])
+@admin_required
+def admin_approve(target_id):
+    set_user_status(target_id, 'active')
+    flash(f'사용자 #{target_id} 승인 완료.')
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/reject/<int:target_id>', methods=['POST'])
+@admin_required
+def admin_reject(target_id):
+    set_user_status(target_id, 'rejected')
+    flash(f'사용자 #{target_id} 거절 완료.')
+    return redirect(url_for('admin_panel'))
+
 
 @app.route('/')
 @login_required
