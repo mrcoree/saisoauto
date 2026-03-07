@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  saiso_app:
+    build: .
+    container_name: saiso_bot
+    restart: always # 서버/NAS 종료 후 재부팅 시 자동 점화
+    ports:
+      - "8080:8080" # NASIP주소:8080 으로 로컬 8080 포지 연결
+    volumes:
+      # 로컬 DB, 로그가 싹 날라가지 않도록 NAS 폴더와 동기화 (영구 보존)
+      - ./instance:/app/instance
+      # 환경변수 파일 연결
+      - ./.env:/app/.env
+    environment:
+      # 한국 서버 시간 동기화
+      - TZ=Asia/Seoul
