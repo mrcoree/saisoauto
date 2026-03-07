@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 class WordPressPublisher:
-    def __init__(self):
-        self.base_url = Config.WP_URL.rstrip('/')
-        self.auth = HTTPBasicAuth(Config.WP_USERNAME, Config.WP_APP_PASSWORD)
-        self.api_url = f"{self.base_url}/wp-json/wp/v2"
+    def __init__(self, wp_url, wp_username, wp_app_password):
+        self.base_url = wp_url.rstrip('/') if wp_url else ''
+        self.auth = HTTPBasicAuth(wp_username, wp_app_password) if wp_username and wp_app_password else None
+        self.api_url = f"{self.base_url}/wp-json/wp/v2" if self.base_url else ""
         # [FIX #9] HTTPS 미사용 시 경고
         if self.base_url and not self.base_url.startswith('https://'):
             logger.warning(

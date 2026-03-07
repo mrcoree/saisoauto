@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class ContentGenerator:
-    def __init__(self):
-        self.client = OpenAI(api_key=Config.OPENAI_API_KEY)
+    def __init__(self, api_key):
+        self.client = OpenAI(api_key=api_key) if api_key else None
 
     def generate_review(self, product_info, max_retries=3):
         """제품 정보를 바탕으로 리뷰 글 생성.

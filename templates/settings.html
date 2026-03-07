@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>설정 - 사이소</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
     <nav class="navbar">
         <div class="nav-brand">사이소</div>
@@ -13,6 +15,10 @@
             <a href="/">상품 검색</a>
             <a href="/queue">대기열</a>
             <a href="/settings" class="active">설정</a>
+            {% if current_user %}
+            <span style="color:white; margin-left:20px; font-weight: 500;">👤 {{ current_user.username }}</span>
+            <a href="/logout" style="margin-left:10px; opacity: 0.8; font-size: 0.9em;">로그아웃</a>
+            {% endif %}
         </div>
     </nav>
 
@@ -31,14 +37,12 @@
             <p class="section-desc">partners.coupang.com에서 API 키를 발급받으세요.</p>
             <div class="form-group">
                 <label>Access Key</label>
-                <input type="text" id="coupangAccessKey"
-                       placeholder="{{ config.COUPANG_ACCESS_KEY }}">
+                <input type="text" id="coupangAccessKey" placeholder="{{ config.COUPANG_ACCESS_KEY }}">
                 <small class="hint">현재: {{ config.COUPANG_ACCESS_KEY }} (변경 시에만 입력)</small>
             </div>
             <div class="form-group">
                 <label>Secret Key</label>
-                <input type="password" id="coupangSecretKey"
-                       placeholder="{{ config.COUPANG_SECRET_KEY }}">
+                <input type="password" id="coupangSecretKey" placeholder="{{ config.COUPANG_SECRET_KEY }}">
                 <small class="hint">현재: {{ config.COUPANG_SECRET_KEY }} (변경 시에만 입력)</small>
             </div>
             <button class="btn btn-secondary" onclick="testCoupang()">연결 테스트</button>
@@ -51,8 +55,7 @@
             <p class="section-desc">platform.openai.com에서 API 키를 발급받으세요.</p>
             <div class="form-group">
                 <label>API Key</label>
-                <input type="password" id="openaiApiKey"
-                       placeholder="{{ config.OPENAI_API_KEY }}">
+                <input type="password" id="openaiApiKey" placeholder="{{ config.OPENAI_API_KEY }}">
                 <small class="hint">현재: {{ config.OPENAI_API_KEY }} (변경 시에만 입력)</small>
             </div>
         </div>
@@ -63,8 +66,7 @@
             <p class="section-desc">aistudio.google.com에서 API 키를 발급받으세요. (이미지 생성용)</p>
             <div class="form-group">
                 <label>Gemini API Key</label>
-                <input type="password" id="geminiApiKey"
-                       placeholder="{{ config.GEMINI_API_KEY }}">
+                <input type="password" id="geminiApiKey" placeholder="{{ config.GEMINI_API_KEY }}">
                 <small class="hint">현재: {{ config.GEMINI_API_KEY }} (변경 시에만 입력)</small>
             </div>
         </div>
@@ -75,18 +77,15 @@
             <p class="section-desc">워드프레스 관리자 → 사용자 → 프로필 → Application Passwords에서 비밀번호를 생성하세요.</p>
             <div class="form-group">
                 <label>사이트 URL</label>
-                <input type="url" id="wpUrl" placeholder="https://your-site.com"
-                       value="{{ config.WP_URL }}">
+                <input type="url" id="wpUrl" placeholder="https://your-site.com" value="{{ config.WP_URL }}">
             </div>
             <div class="form-group">
                 <label>사용자명</label>
-                <input type="text" id="wpUsername" placeholder="admin"
-                       value="{{ config.WP_USERNAME }}">
+                <input type="text" id="wpUsername" placeholder="admin" value="{{ config.WP_USERNAME }}">
             </div>
             <div class="form-group">
                 <label>App Password</label>
-                <input type="password" id="wpAppPassword"
-                       placeholder="{{ config.WP_APP_PASSWORD }}">
+                <input type="password" id="wpAppPassword" placeholder="{{ config.WP_APP_PASSWORD }}">
                 <small class="hint">현재: {{ config.WP_APP_PASSWORD }} (변경 시에만 입력)</small>
             </div>
             <button class="btn btn-secondary" onclick="testWP()">연결 테스트</button>
@@ -99,24 +98,23 @@
             <div class="form-group">
                 <label>모드</label>
                 <select id="scheduleMode">
-                    <option value="interval" {{ 'selected' if settings and settings.mode == 'interval' }}>고정 간격</option>
-                    <option value="daily" {{ 'selected' if settings and settings.mode == 'daily' }}>매일 지정 시간</option>
+                    <option value="interval" {{ 'selected' if settings and settings.mode=='interval' }}>고정 간격</option>
+                    <option value="daily" {{ 'selected' if settings and settings.mode=='daily' }}>매일 지정 시간</option>
                 </select>
             </div>
             <div class="form-group">
                 <label>간격 (시간)</label>
                 <input type="number" id="intervalHours" min="1" max="48"
-                       value="{{ settings.interval_hours if settings else 6 }}">
+                    value="{{ settings.interval_hours if settings else 6 }}">
             </div>
             <div class="form-group">
                 <label>일일 최대 포스팅 수</label>
                 <input type="number" id="maxPostsPerDay" min="1" max="20"
-                       value="{{ settings.max_posts_per_day if settings else 5 }}">
+                    value="{{ settings.max_posts_per_day if settings else 5 }}">
             </div>
             <div class="form-group">
                 <label class="checkbox-label">
-                    <input type="checkbox" id="autoPublish"
-                           {{ 'checked' if settings and settings.auto_publish }}>
+                    <input type="checkbox" id="autoPublish" {{ 'checked' if settings and settings.auto_publish }}>
                     자동 발행 (체크 해제 시 draft로 저장)
                 </label>
             </div>
@@ -149,7 +147,7 @@
             try {
                 const resp = await fetch('/api/settings/save', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data),
                 });
                 const json = await resp.json();
@@ -175,7 +173,7 @@
             await saveSettings();
 
             try {
-                const resp = await fetch('/api/settings/test-coupang', {method: 'POST'});
+                const resp = await fetch('/api/settings/test-coupang', { method: 'POST' });
                 const data = await resp.json();
                 result.textContent = data.success ? '✅ ' + data.message : '❌ ' + data.message;
                 result.className = 'test-result ' + (data.success ? 'success' : 'error');
@@ -194,7 +192,7 @@
             await saveSettings();
 
             try {
-                const resp = await fetch('/api/settings/test-wp', {method: 'POST'});
+                const resp = await fetch('/api/settings/test-wp', { method: 'POST' });
                 const data = await resp.json();
                 result.textContent = data.success ? '✅ ' + data.message : '❌ ' + data.message;
                 result.className = 'test-result ' + (data.success ? 'success' : 'error');
@@ -205,4 +203,5 @@
         }
     </script>
 </body>
+
 </html>

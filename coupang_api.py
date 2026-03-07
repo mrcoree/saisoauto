@@ -11,9 +11,9 @@ DOMAIN = "https://api-gateway.coupang.com"
 
 
 class CoupangAPI:
-    def __init__(self):
-        self.access_key = Config.COUPANG_ACCESS_KEY
-        self.secret_key = Config.COUPANG_SECRET_KEY
+    def __init__(self, access_key, secret_key):
+        self.access_key = access_key
+        self.secret_key = secret_key
 
     def _generate_hmac(self, method, url_path, query_string=""):
         """HMAC-SHA256 인증 헤더 생성."""

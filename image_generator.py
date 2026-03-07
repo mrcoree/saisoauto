@@ -129,10 +129,10 @@ PRODUCT_CATEGORIES = {
 class ImageGenerator:
     """쿠팡 원본 이미지를 참조하여 Gemini로 제품 이미지 생성. 실패 시 원본 폴백."""
 
-    def __init__(self):
+    def __init__(self, api_key):
         self.client = None
-        if Config.GEMINI_API_KEY:
-            self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
+        if api_key:
+            self.client = genai.Client(api_key=api_key)
 
     def generate_images(self, product_info, count=3):
         """제품 이미지 생성.
