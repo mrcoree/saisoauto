@@ -135,7 +135,10 @@ def create_user(username, password, is_admin=0, nickname=None, email=None, statu
         try:
             conn.execute(
                 'INSERT INTO users (username, password_hash, is_admin, nickname, email, status) VALUES (?, ?, ?, ?, ?, ?)',
-                (username, generate_password_hash(password), is_admin, nickname, email, status)
+                (username, generate_password_hash(password), is_admin,
+                 _encrypt(nickname) if nickname else nickname,
+                 _encrypt(email) if email else email,
+                 status)
             )
             user_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
             # 기본 스케줄 설정도 함께 생성
@@ -191,11 +194,21 @@ def get_user_by_id(user_id):
         row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
         return _decrypt_user_row(dict(row)) if row else None
 
+_ALLOWED_USER_COLUMNS = {
+    'password_hash',
+    'email', 'nickname',
+    'coupang_access_key', 'coupang_secret_key',
+    'openai_api_key', 'gemini_api_key',
+    'wp_url', 'wp_username', 'wp_app_password',
+}
+
 def update_user_keys(user_id, keys_dict):
     with get_db() as conn:
         updates = []
         values = []
         for col, val in keys_dict.items():
+            if col not in _ALLOWED_USER_COLUMNS:
+                raise ValueError(f"허용되지 않는 컬럼명: {col}")
             updates.append(f"{col} = ?")
             # API 키 컨럼은 저장 전 암호화
             if col in _API_KEY_COLUMNS:

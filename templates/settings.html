@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>설정 - 사이소</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 
@@ -128,6 +129,10 @@
     </div>
 
     <script>
+        function csrfToken() {
+            return document.querySelector('meta[name="csrf-token"]').content;
+        }
+
         async function saveSettings() {
             const data = {
                 coupang_access_key: document.getElementById('coupangAccessKey').value,
@@ -147,7 +152,7 @@
             try {
                 const resp = await fetch('/api/settings/save', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
                     body: JSON.stringify(data),
                 });
                 const json = await resp.json();
@@ -173,7 +178,7 @@
             await saveSettings();
 
             try {
-                const resp = await fetch('/api/settings/test-coupang', { method: 'POST' });
+                const resp = await fetch('/api/settings/test-coupang', { method: 'POST', headers: { 'X-CSRFToken': csrfToken() } });
                 const data = await resp.json();
                 result.textContent = data.success ? '✅ ' + data.message : '❌ ' + data.message;
                 result.className = 'test-result ' + (data.success ? 'success' : 'error');
@@ -192,7 +197,7 @@
             await saveSettings();
 
             try {
-                const resp = await fetch('/api/settings/test-wp', { method: 'POST' });
+                const resp = await fetch('/api/settings/test-wp', { method: 'POST', headers: { 'X-CSRFToken': csrfToken() } });
                 const data = await resp.json();
                 result.textContent = data.success ? '✅ ' + data.message : '❌ ' + data.message;
                 result.className = 'test-result ' + (data.success ? 'success' : 'error');
@@ -209,6 +214,7 @@
         <h3 style="color:#004085; margin-bottom:10px;">🔑 비밀번호 변경</h3>
         {% with messages = get_flashed_messages() %}{% endwith %}
         <form method="POST" action="{{ url_for('change_password') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div
                 style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:end; flex-wrap:wrap;">
                 <div>
@@ -243,6 +249,7 @@
         </p>
         <form method="POST" action="{{ url_for('delete_account') }}"
             onsubmit="return confirm('정말로 탈퇴하시겠습니까? 모든 데이터가 영구 삭제됩니다.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                 <input type="password" name="confirm_password" required placeholder="현재 비밀번호를 입력하여 탈퇴 확인"
                     style="flex:1; padding:10px; border:1px solid #f5c6cb; border-radius:4px; min-width:200px;">

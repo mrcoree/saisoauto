@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>대기열 관리 - 사이소</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 
@@ -132,7 +133,7 @@
                         <td>
                             <div class="item-name">
                                 {% if item.thumbnail_url %}
-                                <img src="{{ item.thumbnail_url }}" class="thumb-small" alt="">
+                                <img src="{{ item.thumbnail_url|e }}" class="thumb-small" alt="">
                                 {% endif %}
                                 <span>{{ item.product_name[:50] }}</span>
                             </div>
@@ -157,7 +158,7 @@
                         </td>
                         <td>
                             {% if item.post_url %}
-                            <a href="{{ item.post_url }}" target="_blank">글 보기 →</a>
+                            <a href="{{ item.post_url|e }}" target="_blank" rel="noopener">글 보기 →</a>
                             {% elif item.error_message %}
                             <span class="error-text" title="{{ item.error_message|e }}">
                                 {{ item.error_message[:30]|e }}...
@@ -192,6 +193,10 @@
     </div>
 
     <script>
+        function csrfToken() {
+            return document.querySelector('meta[name="csrf-token"]').content;
+        }
+
         /* ── 발행 모드 탭 전환 ── */
         function switchScheduleMode(mode) {
             document.querySelectorAll('.schedule-mode-btn').forEach(btn => btn.classList.remove('active'));
@@ -236,7 +241,7 @@
             try {
                 const resp = await fetch('/api/queue/delete-bulk', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
                     body: JSON.stringify({ item_ids: ids }),
                 });
                 const data = await resp.json();
@@ -251,7 +256,7 @@
         async function callScheduleApi(body) {
             const resp = await fetch('/api/queue/schedule', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
                 body: JSON.stringify(body),
             });
             const data = await resp.json();
@@ -335,7 +340,7 @@
         /* ── 단건 즉시 실행 ── */
         async function runNow(itemId) {
             try {
-                const resp = await fetch(`/api/queue/${itemId}/run-now`, { method: 'POST' });
+                const resp = await fetch(`/api/queue/${itemId}/run-now`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken() } });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error);
                 location.reload();
@@ -346,7 +351,7 @@
 
         async function retryItem(itemId) {
             try {
-                const resp = await fetch(`/api/queue/${itemId}/retry`, { method: 'POST' });
+                const resp = await fetch(`/api/queue/${itemId}/retry`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken() } });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error);
                 location.reload();
@@ -357,7 +362,7 @@
 
         async function deleteItem(itemId) {
             try {
-                const resp = await fetch(`/api/queue/${itemId}`, { method: 'DELETE' });
+                const resp = await fetch(`/api/queue/${itemId}`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken() } });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error);
                 location.reload();

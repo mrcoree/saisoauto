@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash
 from urllib.parse import urlparse, urljoin
 
@@ -51,6 +52,9 @@ def _load_or_create_secret_key():
     return new_key
 
 app.secret_key = _load_or_create_secret_key()
+
+# CSRF 보호 활성화
+csrf = CSRFProtect(app)
 
 # DB 초기화
 init_db()

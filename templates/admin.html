@@ -162,10 +162,12 @@
                 </div>
                 <div class="action-btns">
                     <form method="POST" action="{{ url_for('admin_approve', target_id=user.id) }}" style="margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn-approve">✅ 승인</button>
                     </form>
                     <form method="POST" action="{{ url_for('admin_reject', target_id=user.id) }}"
                         onsubmit="return confirm('{{ user.nickname }}님의 가입을 거절하시겠습니까?')" style="margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn-reject">❌ 거절</button>
                     </form>
                 </div>

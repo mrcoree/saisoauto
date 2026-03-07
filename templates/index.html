@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>사이소 - 쿠팡 파트너스 자동 포스팅</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 
@@ -78,6 +79,10 @@
         const queuedItems = new Map();  // index → queue item ID
         let currentTab = 'search';
         const tabCache = {};  // 탭별 상품 결과 캐시
+
+        function csrfToken() {
+            return document.querySelector('meta[name="csrf-token"]').content;
+        }
 
         /* ── 탭 전환 ── */
         function switchTab(tabName) {
@@ -182,7 +187,7 @@
             try {
                 const resp = await fetch('/api/search', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
                     body: JSON.stringify({ keyword }),
                 });
                 const data = await resp.json();
@@ -204,7 +209,7 @@
             try {
                 const resp = await fetch('/api/goldbox', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
                     body: JSON.stringify({}),
                 });
                 const data = await resp.json();
@@ -233,7 +238,7 @@
             try {
                 const resp = await fetch('/api/best-categories', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
                     body: JSON.stringify({ category_id: categoryId }),
                 });
                 const data = await resp.json();
@@ -335,7 +340,7 @@
             try {
                 const resp = await fetch('/api/queue/add', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
                     body: JSON.stringify({ products: [product] }),
                 });
                 const data = await resp.json();
@@ -362,7 +367,7 @@
             if (!queueId) return;
 
             try {
-                const resp = await fetch(`/api/queue/${queueId}`, { method: 'DELETE' });
+                const resp = await fetch(`/api/queue/${queueId}`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken() } });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || '삭제 실패');
                 queuedItems.delete(index);

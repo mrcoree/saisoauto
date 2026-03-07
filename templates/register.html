@@ -91,6 +91,7 @@
         {% endwith %}
 
         <form method="POST" action="{{ url_for('register') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {% if not need_invite %}
             <p
                 style="background:#e8f5e9; border-radius:6px; padding:10px; color:#2e7d32; text-align:center; font-size:0.9em;">
