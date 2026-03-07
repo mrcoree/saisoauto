@@ -77,6 +77,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
+                is_admin INTEGER DEFAULT 0,
                 coupang_access_key TEXT,
                 coupang_secret_key TEXT,
                 openai_api_key TEXT,
@@ -125,12 +126,12 @@ def init_db():
 
 # ── Users CRUD ──
 
-def create_user(username, password):
+def create_user(username, password, is_admin=0):
     with get_db() as conn:
         try:
             conn.execute(
-                'INSERT INTO users (username, password_hash) VALUES (?, ?)',
-                (username, generate_password_hash(password))
+                'INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)',
+                (username, generate_password_hash(password), is_admin)
             )
             user_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
             # 기본 스케줄 설정도 함께 생성
@@ -142,6 +143,17 @@ def create_user(username, password):
             return user_id, None
         except sqlite3.IntegrityError:
             return None, "이미 존재하는 아이디입니다."
+
+def get_user_count():
+    """DB에 저장된 전체 사용자 수."""
+    with get_db() as conn:
+        return conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+
+def get_admin_users():
+    """is_admin=1인 관리자 목록."""
+    with get_db() as conn:
+        rows = conn.execute('SELECT * FROM users WHERE is_admin = 1').fetchall()
+        return [_decrypt_user_row(dict(r)) for r in rows]
 
 def get_user_by_username(username):
     with get_db() as conn:

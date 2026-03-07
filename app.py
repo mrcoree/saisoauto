@@ -15,7 +15,8 @@ from models import (
     get_queue_item, update_status, update_schedule,
     delete_queue_item, reset_item, get_schedule_settings,
     update_schedule_settings, get_queue_stats,
-    create_user, get_user_by_username, get_user_by_id, update_user_keys
+    create_user, get_user_by_username, get_user_by_id, update_user_keys,
+    get_user_count, get_admin_users
 )
 from coupang_api import CoupangAPI
 from scraper import CoupangScraper
@@ -27,8 +28,27 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# [FIX #6] 고정 secret_key 사용 (매 재시작 시 변경되지 않음)
-app.secret_key = Config.SECRET_KEY or os.urandom(24)
+
+# [SaaS] SECRET_KEY: .env에 없으면 instance/에 자동 생성 및 영구 보존
+def _load_or_create_secret_key():
+    instance_dir = os.path.join(os.path.dirname(__file__), 'instance')
+    os.makedirs(instance_dir, exist_ok=True)
+    key_file = os.path.join(instance_dir, 'secret_key.txt')
+    # .env에 명시된 값 우선 사용
+    if Config.SECRET_KEY:
+        return Config.SECRET_KEY
+    # 파일에 저장된 키 슬라오기
+    if os.path.exists(key_file):
+        with open(key_file, 'r') as f:
+            return f.read().strip()
+    # 최초 실행: 자동 생성 + 저장
+    new_key = os.urandom(32).hex()
+    with open(key_file, 'w') as f:
+        f.write(new_key)
+    logger.info("[SaaS] Flask SECRET_KEY를 instance/secret_key.txt에 자동 생성했습니다.")
+    return new_key
+
+app.secret_key = _load_or_create_secret_key()
 
 # DB 초기화
 init_db()
@@ -101,23 +121,41 @@ def login():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        # 관리자 비밀번호 확인 (아무나 가입 못하게)
-        admin_pass = request.form.get('admin_password')
-        if Config.ADMIN_PASSWORD and admin_pass != Config.ADMIN_PASSWORD:
-            flash('가입 승인 코드가 올바르지 않습니다.')
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        if not username or not password:
+            flash('아이디와 비밀번호를 입력해 주세요.')
             return render_template('register.html')
 
-        user_id, err = create_user(username, password)
+        user_count = get_user_count()
+
+        if user_count == 0:
+            # 첨 번째 사용자는 자동으로 최고 관리자(어드민)가 됩니다
+            user_id, err = create_user(username, password, is_admin=1)
+        else:
+            # 2번째부터는 기존 관리자의 승인 코드 확인
+            invite_code = request.form.get('invite_code', '')
+            admins = get_admin_users()
+            # 관리자 데이터브에서 유회된 맰 첫 번째 관리자 비밀번호 매칭
+            from werkzeug.security import check_password_hash
+            approved = any(check_password_hash(a['password_hash'], invite_code) for a in admins)
+            # 또는 .env에 ADMIN_PASSWORD가 난어있다면 하로호환 지원
+            if not approved and Config.ADMIN_PASSWORD and invite_code == Config.ADMIN_PASSWORD:
+                approved = True
+            if not approved:
+                flash('관리자 승인 코드가 올바르지 않습니다.')
+                return render_template('register.html', need_invite=True)
+            user_id, err = create_user(username, password, is_admin=0)
+
         if err:
             flash(err)
         else:
             session['user_id'] = user_id
             return redirect(url_for('settings_page'))
 
-    return render_template('register.html')
+    user_count = get_user_count()
+    return render_template('register.html', need_invite=(user_count > 0))
 
 @app.route('/logout')
 def logout():

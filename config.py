@@ -8,10 +8,10 @@ class Config:
     # 앱 공통 설정
     CHROME_HEADLESS = os.getenv('CHROME_HEADLESS', 'true').lower() == 'true'
 
-    # 보안 (Flask 세션, 회원가입 승인, DB 암호화)
-    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
-    SECRET_KEY = os.getenv('SECRET_KEY', '')
-    FERNET_KEY = os.getenv('FERNET_KEY', '')  # API 키 AES-256 암호화용 마스터 키
+    # 보안 (하위 호환성 지원 용 - .env에 있는 경우 활용)
+    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')  # 선택사항 (hides this from logs clealy)
+    SECRET_KEY = os.getenv('SECRET_KEY', '')           # 없으면 instance/secret_key.txt 자동 생성
+    FERNET_KEY = os.getenv('FERNET_KEY', '')           # API 키 AES-256 암호화용 마스터 키
 
     # SQLite DB 경로
     DB_PATH = os.path.join(os.path.dirname(__file__), 'saiso.db')

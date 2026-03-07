@@ -91,6 +91,17 @@
         {% endwith %}
 
         <form method="POST" action="{{ url_for('register') }}">
+            {% if not need_invite %}
+            <p
+                style="background:#e8f5e9; border-radius:6px; padding:10px; color:#2e7d32; text-align:center; font-size:0.9em;">
+                🎉 최초 관리자 계정을 생성합니다. 이 계정이 자동으로 최고 관리자가 됩니다.
+            </p>
+            {% else %}
+            <p
+                style="background:#fff3e0; border-radius:6px; padding:10px; color:#e65100; text-align:center; font-size:0.9em;">
+                🔒 새 계정을 만들려면 기존 관리자의 승인이 필요합니다.
+            </p>
+            {% endif %}
             <div class="form-group">
                 <label for="username">사용할 아이디</label>
                 <input type="text" id="username" name="username" required autofocus>
@@ -99,11 +110,12 @@
                 <label for="password">사용할 비밀번호</label>
                 <input type="password" id="password" name="password" required>
             </div>
+            {% if need_invite %}
             <div class="form-group">
-                <label for="admin_password">최고 관리자 승인 코드</label>
-                <input type="password" id="admin_password" name="admin_password" required
-                    placeholder="ADMIN_PASSWORD 환경변수 값">
+                <label for="invite_code">관리자 승인 코드 (관리자의 로그인 비밀번호)</label>
+                <input type="password" id="invite_code" name="invite_code" required placeholder="기존 관리자에게 문의하세요">
             </div>
+            {% endif %}
             <button type="submit" class="login-btn">생성하기</button>
         </form>
         <a href="{{ url_for('login') }}" class="register-link">이미 공간이 있나요? (로그인)</a>
