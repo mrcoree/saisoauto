@@ -6,6 +6,7 @@ from datetime import datetime
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
 from werkzeug.security import check_password_hash
+from urllib.parse import urlparse, urljoin
 
 # 프로젝트 루트를 path에 추가
 sys.path.insert(0, os.path.dirname(__file__))
@@ -23,7 +24,6 @@ from models import (
 from coupang_api import CoupangAPI
 from scraper import CoupangScraper
 from scheduler import PostScheduler
-from werkzeug.security import check_password_hash
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -55,6 +55,10 @@ app.secret_key = _load_or_create_secret_key()
 # DB 초기화
 init_db()
 
+# FERNET_KEY 누락 경고
+if not Config.FERNET_KEY:
+    logger.critical("⛔ FERNET_KEY가 .env에 없습니다! API 키 및 개인정보가 평문으로 저장됩니다.")
+
 # 스케줄러 초기화
 post_scheduler = PostScheduler()
 
@@ -72,12 +76,17 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            # API 요청이면 JSON 401 반환, 아니면 로그인 페이지 리다이렉트
             if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
                 return jsonify({'error': '로그인이 필요합니다.'}), 401
             return redirect(url_for('login', next=request.url))
         return f(*args, **kwargs)
     return decorated_function
+
+def _is_safe_redirect_url(target):
+    """Open Redirect 방지: 같은 호스트의 URL인지 검증."""
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
 # ── API 키 마스킹 ──
 def mask_key(key, visible=4):
@@ -121,6 +130,9 @@ def login():
                 return render_template('login.html')
             session['user_id'] = user['id']
             next_page = request.args.get('next')
+            # Open Redirect 방지
+            if next_page and not _is_safe_redirect_url(next_page):
+                next_page = None
             return redirect(next_page or url_for('index'))
         else:
             flash('아이디 또는 비밀번호가 올바르지 않습니다.')
@@ -216,7 +228,7 @@ def admin_required(f):
         if 'user_id' not in session:
             return redirect(url_for('login'))
         user = get_user_by_id(session['user_id'])
-        if not user or not user.get('is_admin'):
+        if not user or not user.get('is_admin') or user.get('status') != 'active':
             flash('관리자만 접근할 수 있습니다.')
             return redirect(url_for('index'))
         return f(*args, **kwargs)
