@@ -16,11 +16,13 @@
             <a href="/">상품 검색</a>
             <a href="/queue" class="active">대기열 <span class="badge" id="queueBadge">{{ stats.pending }}</span></a>
             <a href="/settings">설정</a>
-            {% if current_user %}
-            <span style="color:white; margin-left:20px; font-weight: 500;">👤 {{ current_user.username }}</span>
-            <a href="/logout" style="margin-left:10px; opacity: 0.8; font-size: 0.9em;">로그아웃</a>
-            {% endif %}
         </div>
+        {% if current_user %}
+        <div class="nav-user-area">
+            <span class="nav-user">{{ current_user.username }}</span>
+            <a href="/logout" class="nav-logout">로그아웃</a>
+        </div>
+        {% endif %}
     </nav>
 
     <div class="container">

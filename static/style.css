@@ -35,6 +35,7 @@ body {
 .nav-links {
     display: flex;
     gap: 8px;
+    align-items: center;
 }
 
 .nav-links a {
@@ -44,6 +45,7 @@ body {
     border-radius: 6px;
     font-size: 14px;
     transition: all 0.2s;
+    white-space: nowrap;
 }
 
 .nav-links a:hover {
@@ -54,6 +56,33 @@ body {
 .nav-links a.active {
     color: white;
     background: #e94560;
+}
+
+.nav-user-area {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.nav-user {
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.nav-logout {
+    color: #aaa;
+    text-decoration: none;
+    font-size: 13px;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.nav-logout:hover {
+    opacity: 1;
+    color: white;
 }
 
 .badge {
@@ -757,30 +786,101 @@ h2 {
 
 /* ── 반응형 ── */
 @media (max-width: 768px) {
+    /* 네비게이션 */
+    .navbar {
+        height: auto;
+        flex-wrap: wrap;
+        padding: 10px 16px;
+        gap: 8px;
+    }
+
+    .nav-brand {
+        font-size: 18px;
+    }
+
+    .nav-user-area {
+        margin-left: auto;
+        gap: 6px;
+    }
+
+    .nav-user {
+        font-size: 12px;
+    }
+
+    .nav-logout {
+        font-size: 11px;
+    }
+
+    .nav-links {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        gap: 4px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding-top: 8px;
+    }
+
+    .nav-links a {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+
+    /* 컨테이너 */
     .container {
         padding: 16px;
     }
 
-    .product-grid {
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    h1 {
+        font-size: 20px;
+        margin-bottom: 16px;
     }
 
-    .stats-row {
-        gap: 8px;
-    }
-
-    .stat-card {
-        min-width: 80px;
-        padding: 12px;
-    }
-
-    .stat-number {
-        font-size: 22px;
+    /* 탭 */
+    .tab-nav {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .tab-btn {
         padding: 8px 14px;
         font-size: 13px;
+        white-space: nowrap;
+    }
+
+    /* 검색 */
+    .search-box {
+        flex-direction: column;
+    }
+
+    .search-box button {
+        padding: 12px;
+    }
+
+    /* 상품 그리드 */
+    .product-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 10px;
+    }
+
+    .card-image {
+        height: 150px;
+    }
+
+    .card-info {
+        padding: 10px 12px;
+    }
+
+    .card-title {
+        font-size: 13px;
+    }
+
+    .card-price {
+        font-size: 16px;
+    }
+
+    /* 카테고리 태그 */
+    .category-tags {
+        gap: 6px;
     }
 
     .category-tag {
@@ -788,12 +888,137 @@ h2 {
         font-size: 13px;
     }
 
+    /* 통계 */
+    .stats-row {
+        gap: 8px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .stat-card {
+        min-width: unset;
+        padding: 12px 8px;
+    }
+
+    .stat-number {
+        font-size: 22px;
+    }
+
+    .stat-label {
+        font-size: 11px;
+    }
+
+    /* 스케줄 패널 */
+    .schedule-panel {
+        padding: 16px;
+    }
+
+    .schedule-mode-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .schedule-mode-btn {
+        padding: 6px 12px;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
     .schedule-form {
         flex-direction: column;
         align-items: stretch;
     }
 
-    .action-cell {
+    /* 액션 바 */
+    .action-bar {
+        flex-wrap: wrap;
+        gap: 8px;
+        top: auto;
+        position: relative;
+    }
+
+    /* 테이블 */
+    .queue-table th,
+    .queue-table td {
+        padding: 8px 6px;
+        font-size: 12px;
+    }
+
+    .thumb-small {
+        width: 32px;
+        height: 32px;
+    }
+
+    .action-cell .btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+
+    /* 설정 */
+    .settings-section {
+        padding: 16px;
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="password"],
+    .form-group input[type="url"],
+    .form-group input[type="number"],
+    .form-group select {
+        max-width: 100%;
+    }
+
+    .save-section {
         flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .test-result {
+        margin-left: 0;
+        display: block;
+        margin-top: 8px;
+    }
+
+    /* 버튼 */
+    .btn-lg {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+/* 더 작은 화면 (아이폰 SE 등) */
+@media (max-width: 400px) {
+    .product-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .card-image {
+        height: 120px;
+    }
+
+    .card-info {
+        padding: 8px;
+    }
+
+    .card-title {
+        font-size: 12px;
+    }
+
+    .card-price {
+        font-size: 14px;
+    }
+
+    .stats-row {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .stat-number {
+        font-size: 18px;
+    }
+
+    .nav-links a {
+        padding: 5px 8px;
+        font-size: 12px;
     }
 }
