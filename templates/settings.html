@@ -203,6 +203,37 @@
         }
     </script>
 
+    <!-- 비밀번호 변경 섹션 -->
+    <div
+        style="max-width:900px; margin:20px auto; padding:20px; background:#f0f8ff; border:1px solid #b8daff; border-radius:8px;">
+        <h3 style="color:#004085; margin-bottom:10px;">🔑 비밀번호 변경</h3>
+        {% with messages = get_flashed_messages() %}{% endwith %}
+        <form method="POST" action="{{ url_for('change_password') }}">
+            <div
+                style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; align-items:end; flex-wrap:wrap;">
+                <div>
+                    <label style="display:block; font-size:13px; color:#555; margin-bottom:4px;">현재 비밀번호</label>
+                    <input type="password" name="current_password" required
+                        style="width:100%; padding:9px; border:1px solid #b8daff; border-radius:4px; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:13px; color:#555; margin-bottom:4px;">새 비밀번호 (6자 이상)</label>
+                    <input type="password" name="new_password" required minlength="6"
+                        style="width:100%; padding:9px; border:1px solid #b8daff; border-radius:4px; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:13px; color:#555; margin-bottom:4px;">새 비밀번호 확인</label>
+                    <input type="password" name="confirm_new_password" required minlength="6"
+                        style="width:100%; padding:9px; border:1px solid #b8daff; border-radius:4px; box-sizing:border-box;">
+                </div>
+                <button type="submit"
+                    style="padding:9px 18px; background:#0d6efd; color:white; border:none; border-radius:4px; cursor:pointer; white-space:nowrap;">
+                    변경
+                </button>
+            </div>
+        </form>
+    </div>
+
     <!-- 회원 탈퇴 섹션 -->
     <div
         style="max-width:900px; margin:20px auto; padding:20px; background:#fff5f5; border:1px solid #f5c6cb; border-radius:8px;">

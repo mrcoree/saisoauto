@@ -165,6 +165,31 @@ def logout():
     session.pop('user_id', None)
     return redirect(url_for('login'))
 
+@app.route('/change-password', methods=['POST'])
+@login_required
+def change_password():
+    """현재 비밀번호 확인 후 새 비밀번호로 변경."""
+    from werkzeug.security import generate_password_hash
+    user_id = session['user_id']
+    current_pw = request.form.get('current_password', '')
+    new_pw = request.form.get('new_password', '')
+    confirm_pw = request.form.get('confirm_new_password', '')
+
+    user = get_user_by_id(user_id)
+    if not user or not check_password_hash(user['password_hash'], current_pw):
+        flash('현재 비밀번호가 일치하지 않습니다.')
+        return redirect(url_for('settings_page'))
+    if len(new_pw) < 6:
+        flash('새 비밀번호는 6자 이상이어야 합니다.')
+        return redirect(url_for('settings_page'))
+    if new_pw != confirm_pw:
+        flash('새 비밀번호가 일치하지 않습니다.')
+        return redirect(url_for('settings_page'))
+
+    update_user_keys(user_id, {'password_hash': generate_password_hash(new_pw)})
+    flash('비밀번호가 성공적으로 변경되었습니다.')
+    return redirect(url_for('settings_page'))
+
 @app.route('/delete-account', methods=['POST'])
 @login_required
 def delete_account():
