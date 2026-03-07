@@ -22,6 +22,7 @@ def _get_fernet():
 
 # API 키 컨럼명 목록 (이 컨럼만 암호화 대상)
 _API_KEY_COLUMNS = {
+    'email', 'nickname',   # 개인정보 비식별 처리
     'coupang_access_key', 'coupang_secret_key',
     'openai_api_key', 'gemini_api_key',
     'wp_url', 'wp_username', 'wp_app_password',
@@ -153,7 +154,7 @@ def get_pending_users():
         rows = conn.execute(
             "SELECT id, username, nickname, email, created_at FROM users WHERE status = 'pending' ORDER BY created_at ASC"
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [_decrypt_user_row(dict(r)) for r in rows]
 
 def set_user_status(user_id, status):
     """user_id의 status를 'active' 또는 'rejected'로 변경."""
