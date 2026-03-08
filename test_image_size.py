@@ -17,7 +17,7 @@ def main():
     
     # Try gemini
     prompt = "Create a lifestyle photo of this chair in a dining room."
-    print("Requesting from Gemini with 16:9 config...")
+    print("Requesting from Gemini with 1:1 config...")
     res_img = gen._generate_with_gemini(img, prompt)
     if res_img:
         print(f"Generated image size: {res_img.size}")

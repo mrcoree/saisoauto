@@ -305,7 +305,7 @@ class ImageGenerator:
                 response_modalities=["IMAGE", "TEXT"],
                 image_config=types.ImageConfig(
                     image_size="1K",
-                    aspect_ratio="16:9",
+                    aspect_ratio="1:1",
                 ),
             ),
         )
@@ -341,7 +341,7 @@ class ImageGenerator:
                         response_modalities=["IMAGE", "TEXT"],
                         image_config=types.ImageConfig(
                             image_size="1K",
-                            aspect_ratio="16:9",
+                            aspect_ratio="1:1",
                         ),
                     ),
                 )

@@ -76,7 +76,7 @@ class PostScheduler:
         user_ids = get_all_users()
         for user_id in user_ids:
             settings = get_schedule_settings(user_id)
-            if not settings or not settings.get('auto_publish'):
+            if not settings:
                 continue
 
             due_items = get_due_items(user_id)
