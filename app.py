@@ -65,6 +65,7 @@ if not Config.FERNET_KEY:
 
 # 스케줄러 초기화
 post_scheduler = PostScheduler()
+post_scheduler.start()
 
 # 스크래퍼 싱글턴 (브라우저 메모리 관리를 위해 공통 1개만 띄움)
 _scraper = None
@@ -554,8 +555,6 @@ if __name__ == '__main__':
     logger.info("SaaS Saiso App 시작")
     if not Config.SECRET_KEY:
         logger.warning("⚠️ SECRET_KEY가 환경변수에 없습니다. 임시 토큰을 사용하므로 재시작 시 로그아웃됩니다.")
-
-    post_scheduler.start()
 
     try:
         app.run(debug=False, use_reloader=False, port=8080)

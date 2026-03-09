@@ -1,5 +1,5 @@
-# Python 3.11 슬림 버전 사용
-FROM python:3.11-slim
+# Python 3.11 슬림 버전 사용 (Mac M1/M2 등 ARM 환경에서 Chrome 설치를 위해 amd64 명시)
+FROM --platform=linux/amd64 python:3.11-slim
 
 # 필요한 리눅스 패키지 설치 (Chrome 구동용)
 RUN apt-get update && apt-get install -y \
