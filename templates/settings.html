@@ -66,7 +66,7 @@
         <!-- Google Gemini -->
         <div class="settings-section">
             <h2>Google Gemini API</h2>
-            <p class="section-desc">aistudio.google.com에서 API 키를 발급받으세요. (이미지 생성용)</p>
+            <p class="section-desc">aistudio.google.com에서 API 키를 발급받으세요. (이미지 생성용) 여러 개면 쉼표로 구분하세요 — 앞의 키가 1순위이고, 한도(429)에 걸리면 다음 키로 넘어갑니다.</p>
             <div class="form-group">
                 <label>Gemini API Key</label>
                 <input type="password" id="geminiApiKey" placeholder="{{ config.GEMINI_API_KEY }}">

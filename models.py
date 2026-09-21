@@ -85,7 +85,7 @@ def init_db():
                 coupang_access_key TEXT,
                 coupang_secret_key TEXT,
                 openai_api_key TEXT,
-                gemini_api_key TEXT,
+                gemini_api_key TEXT,  -- 쉼표로 여러 개 허용(앞이 1순위, image_generator.split_keys)
                 wp_url TEXT,
                 wp_username TEXT,
                 wp_app_password TEXT,

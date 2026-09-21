@@ -1,4 +1,6 @@
 import os
+import re
+import base64
 import logging
 import tempfile
 import requests
@@ -9,8 +11,28 @@ from google import genai
 from google.genai import types
 
 from config import Config
+from google_keys import google_keys, with_google_key
+from gemini_chain import ContentRefused, evolink_base, evolink_key, post_native_json
 
 logger = logging.getLogger(__name__)
+
+# 이미지 출력 모델(구글 네이티브). 이미지·영상 모델은 모델 폴백 없음(2026-09-22 정책) — 키 회전 → EvoLink 네이티브만.
+IMAGE_MODEL = "gemini-3.1-flash-image-preview"
+IMAGE_TIMEOUT_S = float(os.environ.get("GEMINI_IMAGE_TIMEOUT_S", "180"))
+
+_clients = {}
+
+
+def _client_for(key):
+    c = _clients.get(key)
+    if c is None:
+        c = _clients[key] = genai.Client(api_key=key)
+    return c
+
+
+def split_keys(raw):
+    """사용자 gemini_api_key 필드 — 쉼표(;·줄바꿈)로 여러 개 허용, 앞이 1순위."""
+    return [k.strip() for k in re.split(r"[,;\n]", raw or "") if k.strip()]
 
 # [FIX #5] 이미지 다운로드 허용 도메인 (쿠팡 CDN)
 ALLOWED_IMAGE_HOSTS = {
@@ -127,12 +149,18 @@ PRODUCT_CATEGORIES = {
 
 
 class ImageGenerator:
-    """쿠팡 원본 이미지를 참조하여 Gemini로 제품 이미지 생성. 실패 시 원본 폴백."""
+    """쿠팡 원본 이미지를 참조하여 Gemini로 제품 이미지 생성. 실패 시 원본 폴백.
+
+    Gemini 경로(2026-09-22 정책): 구글 직접 키 회전(env GOOGLE_AI_API_KEYS 앞이 1순위, 그 뒤에 사용자 키 목록)
+    → 전부 막히면 EvoLink 네이티브(EVOLINK_API_KEY). 429 는 그 키·그 모델 15분 봉인, 401/403 은 키 전체 봉인.
+    내용 거절(파트 없음)은 폴백하지 않는다.
+    """
 
     def __init__(self, api_key):
-        self.client = None
-        if api_key:
-            self.client = genai.Client(api_key=api_key)
+        self.user_keys = split_keys(api_key)  # 사용자 DB 필드(쉼표 목록 허용) — env 목록 뒤에 붙는다
+        self.keys = google_keys(extra=self.user_keys)
+        self.enabled = bool(self.keys or evolink_key())
+        self.last_route = None  # 마지막 성공 경로: 'google' | 'evolink'
 
     def generate_images(self, product_info, count=3):
         """제품 이미지 생성.
@@ -166,7 +194,7 @@ class ImageGenerator:
         if not original_images:
             logger.warning("  사용 가능한 제품 이미지 없음")
             # Gemini 텍스트 전용 생성 시도
-            if self.client:
+            if self.enabled:
                 return self._generate_text_only(product_info, count)
             return []
 
@@ -180,7 +208,7 @@ class ImageGenerator:
             img = None
 
             # Gemini 시도
-            if self.client and i < len(prompts):
+            if self.enabled and i < len(prompts):
                 try:
                     img = self._generate_with_gemini(ref_image, prompts[i])
                     if img:
@@ -286,21 +314,45 @@ class ImageGenerator:
         # PIL Image → bytes 변환
         buf = io.BytesIO()
         ref_image.save(buf, format='PNG')
-        image_bytes = buf.getvalue()
+        return self._generate_image(prompt, ref_png=buf.getvalue())
 
-        contents = [
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-                    types.Part.from_text(text=prompt),
-                ],
-            ),
-        ]
+    # ── Gemini 이미지 호출: 구글 직접(키 회전) → EvoLink 네이티브 ──
 
-        response = self.client.models.generate_content(
-            model="gemini-3.1-flash-image-preview",
-            contents=contents,
+    def _generate_image(self, prompt, ref_png=None):
+        """프롬프트(+참조 PNG) → PIL 이미지. 구글 키 회전이 전부 실패하면 EvoLink 네이티브. 거절(파트 없음)은 None."""
+        errors = []
+        if self.keys:
+            try:
+                img = with_google_key(lambda key: self._google_image(key, prompt, ref_png),
+                                      scope=IMAGE_MODEL, extra=self.user_keys)
+                self.last_route = 'google'
+                return img  # None 이면 내용 거절/빈 응답 — 폴백 금지
+            except Exception as e:
+                errors.append(f"구글 직접: {str(e)[:200]}")
+                logger.warning(f"  Gemini 구글 직접 실패 → 다음 경로: {str(e)[:200]}")
+        if evolink_key():
+            try:
+                img = self._evolink_image(prompt, ref_png)
+                self.last_route = 'evolink'
+                return img
+            except ContentRefused as e:
+                logger.warning(f"  EvoLink 내용 거절(폴백 없음): {str(e)[:200]}")
+                return None
+            except Exception as e:
+                errors.append(f"EvoLink: {str(e)[:200]}")
+                logger.warning(f"  EvoLink 실패: {str(e)[:200]}")
+        if errors:
+            raise RuntimeError("Gemini 이미지 경로 전부 실패(" + " → ".join(errors) + ")")
+        raise RuntimeError("Gemini 키 미설정(GOOGLE_AI_API_KEYS · 사용자 gemini_api_key · EVOLINK_API_KEY 중 하나 필요)")
+
+    def _google_image(self, key, prompt, ref_png):
+        parts = []
+        if ref_png:
+            parts.append(types.Part.from_bytes(data=ref_png, mime_type="image/png"))
+        parts.append(types.Part.from_text(text=prompt))
+        response = _client_for(key).models.generate_content(
+            model=IMAGE_MODEL,
+            contents=[types.Content(role="user", parts=parts)],
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE", "TEXT"],
                 image_config=types.ImageConfig(
@@ -309,15 +361,37 @@ class ImageGenerator:
                 ),
             ),
         )
-
         if not response.parts:
             return None
-
         for part in response.parts:
             if part.inline_data and part.inline_data.data:
-                img = Image.open(io.BytesIO(part.inline_data.data)).convert('RGB')
-                return img
+                return Image.open(io.BytesIO(part.inline_data.data)).convert('RGB')
+        return None
 
+    def _evolink_image(self, prompt, ref_png):
+        """EvoLink 는 구글 네이티브 형식 그대로라 이미지 출력 모델도 :generateContent 로 부른다(2026-09-22 프로브로 확인)."""
+        parts = []
+        if ref_png:
+            parts.append({"inlineData": {"mimeType": "image/png", "data": base64.b64encode(ref_png).decode("ascii")}})
+        parts.append({"text": prompt})
+        body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "responseModalities": ["IMAGE", "TEXT"],
+                "imageConfig": {"imageSize": "1K", "aspectRatio": "1:1"},
+            },
+        }
+        import json
+        data = post_native_json("EvoLink", f"{evolink_base()}/v1beta/models/{IMAGE_MODEL}:generateContent",
+                                {"x-goog-api-key": evolink_key()}, json.dumps(body).encode("utf-8"), IMAGE_TIMEOUT_S)
+        cand = data["candidates"][0]
+        for part in (cand.get("content") or {}).get("parts") or []:
+            blob = part.get("inlineData") or part.get("inline_data")
+            if blob and blob.get("data"):
+                return Image.open(io.BytesIO(base64.b64decode(blob["data"]))).convert('RGB')
+        reason = str(cand.get("finishReason") or "")
+        if reason and reason != "STOP":
+            raise ContentRefused(f"EvoLink 이미지 없음({reason})")
         return None
 
     def _generate_text_only(self, product_info, count):
@@ -334,27 +408,13 @@ class ImageGenerator:
 
         for i, prompt in enumerate(prompts[:count]):
             try:
-                response = self.client.models.generate_content(
-                    model="gemini-3.1-flash-image-preview",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["IMAGE", "TEXT"],
-                        image_config=types.ImageConfig(
-                            image_size="1K",
-                            aspect_ratio="1:1",
-                        ),
-                    ),
-                )
-                if response.parts:
-                    for part in response.parts:
-                        if part.inline_data and part.inline_data.data:
-                            img = Image.open(io.BytesIO(part.inline_data.data)).convert('RGB')
-                            if i == 0 and product_name:
-                                img = self._add_title_bar(img, product_name)
-                            path = self._save_image(img, i)
-                            image_paths.append(path)
-                            logger.info(f"  Gemini 텍스트 전용 이미지 {i+1}/{count} 생성 완료")
-                            break
+                img = self._generate_image(prompt)
+                if img is not None:
+                    if i == 0 and product_name:
+                        img = self._add_title_bar(img, product_name)
+                    path = self._save_image(img, i)
+                    image_paths.append(path)
+                    logger.info(f"  Gemini 텍스트 전용 이미지 {i+1}/{count} 생성 완료")
             except Exception as e:
                 logger.warning(f"  Gemini 텍스트 전용 이미지 {i+1}/{count} 실패: {e}")
 

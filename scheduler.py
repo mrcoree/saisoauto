@@ -120,7 +120,7 @@ class PostScheduler:
 
         # 사용자별 서비스 객체 초기화
         generator = ContentGenerator(api_key=user['openai_api_key'])
-        img_gen = ImageGenerator(api_key=user['gemini_api_key'])
+        img_gen = ImageGenerator(api_key=user['gemini_api_key'])  # 쉼표 목록 허용 — env GOOGLE_AI_API_KEYS 뒤에 붙어 회전, 전부 막히면 EvoLink
         publisher = WordPressPublisher(
             wp_url=user['wp_url'], 
             wp_username=user['wp_username'], 
