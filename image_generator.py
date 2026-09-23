@@ -4,9 +4,7 @@ import tempfile
 import requests
 from PIL import Image, ImageDraw, ImageFont
 import io
-
-from google import genai
-from google.genai import types
+import base64
 
 from config import Config
 
@@ -127,12 +125,44 @@ PRODUCT_CATEGORIES = {
 
 
 class ImageGenerator:
-    """쿠팡 원본 이미지를 참조하여 Gemini로 제품 이미지 생성. 실패 시 원본 폴백."""
+    """쿠팡 원본 이미지를 참조하여 제품 이미지 생성. 실패 시 원본 폴백.
 
-    def __init__(self, api_key):
-        self.client = None
-        if api_key:
-            self.client = genai.Client(api_key=api_key)
+    제미나이 API 직접 호출은 금지(2026-09-23). 이미지 생성은 agy 게이트웨이
+    (Gemini REST 모양, POST {AGY_GATEWAY_URL}/v1beta/models/{model}:generateContent)로만 보낸다.
+    구글 키·EvoLink·kie 폴백은 없다 — 게이트웨이가 실패하면 에러를 로그에 남기고 원본 이미지를 쓴다.
+    """
+
+    MODEL = "gemini-3.1-flash-image-preview"
+    TIMEOUT = 180  # agy 호출은 건당 수십 초까지 걸린다
+
+    def __init__(self, api_key=None):
+        # api_key: 사용자 설정의 '게이트웨이 토큰'(옛 gemini_api_key 칸). 환경변수가 우선.
+        self.base_url = (os.getenv('AGY_GATEWAY_URL') or '').rstrip('/')
+        self.token = os.getenv('AGY_GATEWAY_TOKEN') or api_key or ''
+        self.client = bool(self.base_url and self.token)
+        if not self.client:
+            logger.error("  이미지 생성 비활성: AGY_GATEWAY_URL/AGY_GATEWAY_TOKEN 이 설정되지 않음 — 원본 이미지만 사용")
+
+    def _gateway_image(self, parts):
+        """게이트웨이에 이미지 생성 요청 → PIL Image. 실패하면 예외(상태·본문 포함)."""
+        body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {"responseModalities": ["IMAGE", "TEXT"]},
+        }
+        r = requests.post(
+            f"{self.base_url}/v1beta/models/{self.MODEL}:generateContent",
+            headers={"x-goog-api-key": self.token, "Content-Type": "application/json"},
+            json=body,
+            timeout=self.TIMEOUT,
+        )
+        if r.status_code != 200:
+            raise RuntimeError(f"agy 게이트웨이 {r.status_code}: {r.text[:300]}")
+        for cand in r.json().get("candidates") or []:
+            for part in (cand.get("content") or {}).get("parts") or []:
+                data = (part.get("inlineData") or {}).get("data")
+                if data:
+                    return Image.open(io.BytesIO(base64.b64decode(data))).convert('RGB')
+        raise RuntimeError("agy 게이트웨이 응답에 이미지가 없음")
 
     def generate_images(self, product_info, count=3):
         """제품 이미지 생성.
@@ -186,7 +216,7 @@ class ImageGenerator:
                     if img:
                         logger.info(f"  Gemini 이미지 {i+1}/{count} 생성 완료")
                 except Exception as e:
-                    logger.warning(f"  Gemini 이미지 {i+1}/{count} 실패: {e}")
+                    logger.error(f"  게이트웨이 이미지 {i+1}/{count} 실패(원본 사용): {e}")
 
             # Gemini 실패 시 원본 사용
             if not img:
@@ -282,43 +312,17 @@ class ImageGenerator:
         return prompts[:count]
 
     def _generate_with_gemini(self, ref_image, prompt):
-        """원본 이미지를 참조로 Gemini API에서 이미지 생성."""
+        """원본 이미지를 참조로 agy 게이트웨이에서 이미지 생성."""
         # PIL Image → bytes 변환
         buf = io.BytesIO()
         ref_image.save(buf, format='PNG')
         image_bytes = buf.getvalue()
 
-        contents = [
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-                    types.Part.from_text(text=prompt),
-                ],
-            ),
+        parts = [
+            {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(image_bytes).decode()}},
+            {"text": prompt + " Square 1:1 aspect ratio."},
         ]
-
-        response = self.client.models.generate_content(
-            model="gemini-3.1-flash-image-preview",
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-                image_config=types.ImageConfig(
-                    image_size="1K",
-                    aspect_ratio="1:1",
-                ),
-            ),
-        )
-
-        if not response.parts:
-            return None
-
-        for part in response.parts:
-            if part.inline_data and part.inline_data.data:
-                img = Image.open(io.BytesIO(part.inline_data.data)).convert('RGB')
-                return img
-
-        return None
+        return self._gateway_image(parts)
 
     def _generate_text_only(self, product_info, count):
         """참조 이미지 없이 텍스트만으로 Gemini 이미지 생성 (최후 폴백)."""
@@ -334,29 +338,14 @@ class ImageGenerator:
 
         for i, prompt in enumerate(prompts[:count]):
             try:
-                response = self.client.models.generate_content(
-                    model="gemini-3.1-flash-image-preview",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["IMAGE", "TEXT"],
-                        image_config=types.ImageConfig(
-                            image_size="1K",
-                            aspect_ratio="1:1",
-                        ),
-                    ),
-                )
-                if response.parts:
-                    for part in response.parts:
-                        if part.inline_data and part.inline_data.data:
-                            img = Image.open(io.BytesIO(part.inline_data.data)).convert('RGB')
-                            if i == 0 and product_name:
-                                img = self._add_title_bar(img, product_name)
-                            path = self._save_image(img, i)
-                            image_paths.append(path)
-                            logger.info(f"  Gemini 텍스트 전용 이미지 {i+1}/{count} 생성 완료")
-                            break
+                img = self._gateway_image([{"text": prompt + " Square 1:1 aspect ratio."}])
+                if i == 0 and product_name:
+                    img = self._add_title_bar(img, product_name)
+                path = self._save_image(img, i)
+                image_paths.append(path)
+                logger.info(f"  Gemini 텍스트 전용 이미지 {i+1}/{count} 생성 완료")
             except Exception as e:
-                logger.warning(f"  Gemini 텍스트 전용 이미지 {i+1}/{count} 실패: {e}")
+                logger.error(f"  게이트웨이 텍스트 전용 이미지 {i+1}/{count} 실패: {e}")
 
         return image_paths
 

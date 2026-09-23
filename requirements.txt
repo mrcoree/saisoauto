@@ -7,7 +7,6 @@ beautifulsoup4==4.12.3
 openai==1.58.1
 requests==2.32.3
 Pillow==11.1.0
-google-genai
 apscheduler==3.10.4
 gunicorn==21.2.0
 cryptography==42.0.8

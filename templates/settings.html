@@ -65,10 +65,10 @@
 
         <!-- Google Gemini -->
         <div class="settings-section">
-            <h2>Google Gemini API</h2>
-            <p class="section-desc">aistudio.google.com에서 API 키를 발급받으세요. (이미지 생성용)</p>
+            <h2>이미지 생성 게이트웨이</h2>
+            <p class="section-desc">agy 게이트웨이 토큰(이미지 생성용). 서버 .env 의 AGY_GATEWAY_TOKEN 이 있으면 그것이 우선합니다. 게이트웨이 주소는 AGY_GATEWAY_URL.</p>
             <div class="form-group">
-                <label>Gemini API Key</label>
+                <label>게이트웨이 토큰</label>
                 <input type="password" id="geminiApiKey" placeholder="{{ config.GEMINI_API_KEY }}">
                 <small class="hint">현재: {{ config.GEMINI_API_KEY }} (변경 시에만 입력)</small>
             </div>

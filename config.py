@@ -22,4 +22,6 @@ class Config:
     # 이제 .env가 아닌 DB의 users 테이블에서 사용자별로 조회합니다.
     # 하위 호환성을 위해 잠시 남겨두지만 앱 코드에서 직접 사용하지 않습니다.
     # COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY, OPENAI_API_KEY
-    # GEMINI_API_KEY, WP_URL, WP_USERNAME, WP_APP_PASSWORD
+    # WP_URL, WP_USERNAME, WP_APP_PASSWORD
+    # 이미지 생성: 제미나이 API 직접 호출 금지(2026-09-23) → agy 게이트웨이.
+    #   AGY_GATEWAY_URL (.env, 필수) · AGY_GATEWAY_TOKEN (.env 우선, 없으면 [설정]의 게이트웨이 토큰)

@@ -15,9 +15,9 @@ def main():
     img = gen._download_image(product_info['image_urls'][0])
     print(f"Original image size: {img.size}")
     
-    # Try gemini
+    # agy 게이트웨이 (AGY_GATEWAY_URL/AGY_GATEWAY_TOKEN)
     prompt = "Create a lifestyle photo of this chair in a dining room."
-    print("Requesting from Gemini with 1:1 config...")
+    print("Requesting from agy gateway...")
     res_img = gen._generate_with_gemini(img, prompt)
     if res_img:
         print(f"Generated image size: {res_img.size}")
